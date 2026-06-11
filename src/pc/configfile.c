@@ -75,6 +75,7 @@ unsigned int puppycam_invertY = 0;
 unsigned int puppycam_degrade = 10;
 unsigned int puppycam_aggression = 35;
 unsigned int puppycam_panlevel = 75;
+unsigned int dynamic_shadows_enabled = 1;
 
 
 
@@ -97,6 +98,7 @@ static const struct ConfigOption options[] = {
     {.name = "puppycam_stopping_speed", .type = CONFIG_TYPE_UINT, .uintValue = &puppycam_degrade},
     {.name = "puppycam_centre_aggression", .type = CONFIG_TYPE_UINT, .uintValue = &puppycam_aggression},
     {.name = "puppycam_pan_amount", .type = CONFIG_TYPE_UINT, .uintValue = &puppycam_panlevel},
+    {.name = "dynamic_shadows_enabled", .type = CONFIG_TYPE_UINT, .uintValue = &dynamic_shadows_enabled},
 #ifndef TARGET_N3DS
     {.name = "key_stickup",    .type = CONFIG_TYPE_UINT, .uintValue = &configKeyStickUp},
     {.name = "key_stickdown",  .type = CONFIG_TYPE_UINT, .uintValue = &configKeyStickDown},

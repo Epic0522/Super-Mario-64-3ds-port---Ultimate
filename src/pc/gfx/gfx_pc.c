@@ -1,4 +1,5 @@
 #include <math.h>
+#include <float.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +20,7 @@
 #ifdef TARGET_N3DS
 #include "gfx_3ds.h"
 #include "src/pc/profiler_3ds.h"
+#include "enhancements/dynamic_shadows.h"
 #else
 #define profiler_3ds_log_time(id) do {} while (0)
 #endif
@@ -58,6 +60,9 @@ struct XYWidthHeight {
 struct LoadedVertex {
     float x, y, z, w;
     float u, v;
+#ifdef TARGET_N3DS
+    float light_u, light_v, light_depth;
+#endif
     struct RGBA color;
     uint8_t clip_rej;
 };
@@ -146,6 +151,9 @@ static struct RenderingState {
     bool depth_mask;
     bool decal_mode;
     bool alpha_blend;
+#ifdef TARGET_N3DS
+    bool dynamic_shadow_receiver;
+#endif
     struct XYWidthHeight viewport, scissor;
     struct ShaderProgram *shader_program;
     struct TextureHashmapNode *textures[2];
@@ -162,8 +170,144 @@ static size_t buf_vbo_num_tris;
 static struct GfxWindowManagerAPI *gfx_wapi;
 static struct GfxRenderingAPI *gfx_rapi;
 
+static void gfx_flush(void);
+static void gfx_matrix_mul(float res[4][4], const float a[4][4], const float b[4][4]);
+static inline uint32_t color_comb(uint32_t a, uint32_t b, uint32_t c, uint32_t d);
+
 #ifdef TARGET_N3DS
+static void gfx_dynamic_shadow_reset_caster_bounds(void) {
+    gDynamicShadowCasterBoundsReady = FALSE;
+    gDynamicShadowCasterMinU = FLT_MAX;
+    gDynamicShadowCasterMaxU = -FLT_MAX;
+    gDynamicShadowCasterMinV = FLT_MAX;
+    gDynamicShadowCasterMaxV = -FLT_MAX;
+}
+
+static void gfx_dynamic_shadow_include_caster_vertex(float x, float y, float w) {
+    float inv_w;
+    float u;
+    float v;
+
+    if (fabsf(w) < 0.001f) {
+        return;
+    }
+
+    inv_w = 1.0f / w;
+    u = x * inv_w * 0.5f + 0.5f;
+    v = y * inv_w * 0.5f + 0.5f;
+    if (u < -0.25f || u > 1.25f || v < -0.25f || v > 1.25f) {
+        return;
+    }
+
+    if (u < gDynamicShadowCasterMinU) gDynamicShadowCasterMinU = u;
+    if (u > gDynamicShadowCasterMaxU) gDynamicShadowCasterMaxU = u;
+    if (v < gDynamicShadowCasterMinV) gDynamicShadowCasterMinV = v;
+    if (v > gDynamicShadowCasterMaxV) gDynamicShadowCasterMaxV = v;
+    gDynamicShadowCasterBoundsReady = TRUE;
+}
+
+static bool gfx_dynamic_shadow_coord_in_range(float v) {
+    return v >= 0.001f && v <= 0.999f;
+}
+
+static bool gfx_dynamic_shadow_receiver_tri_in_range(struct LoadedVertex *v_arr[3]) {
+    const float margin = 0.06f;
+    float triMinU = 1.0f;
+    float triMaxU = 0.0f;
+    float triMinV = 1.0f;
+    float triMaxV = 0.0f;
+
+    if (!gDynamicShadowCasterBoundsReady) {
+        return false;
+    }
+
+    for (s32 i = 0; i < 3; i++) {
+        if (!gfx_dynamic_shadow_coord_in_range(v_arr[i]->light_u)
+            || !gfx_dynamic_shadow_coord_in_range(v_arr[i]->light_v)
+            || !gfx_dynamic_shadow_coord_in_range(v_arr[i]->light_depth)) {
+            return false;
+        }
+        if (v_arr[i]->light_u < triMinU) triMinU = v_arr[i]->light_u;
+        if (v_arr[i]->light_u > triMaxU) triMaxU = v_arr[i]->light_u;
+        if (v_arr[i]->light_v < triMinV) triMinV = v_arr[i]->light_v;
+        if (v_arr[i]->light_v > triMaxV) triMaxV = v_arr[i]->light_v;
+    }
+
+    if (triMaxU < gDynamicShadowCasterMinU - margin || triMinU > gDynamicShadowCasterMaxU + margin
+        || triMaxV < gDynamicShadowCasterMinV - margin || triMinV > gDynamicShadowCasterMaxV + margin) {
+        return false;
+    }
+    return true;
+}
+
+#define DYNAMIC_SHADOW_MODEL_ALPHA 140
+
 static bool n64_native_res;
+static bool dynamic_shadow_material;
+static bool dynamic_shadow_receiver_marking_enabled = true;
+static uint8_t dynamic_shadow_receiver_mask_mode;
+static uint32_t dynamic_shadow_pass = DYNAMIC_SHADOW_GFX_PASS_NORMAL;
+static float dynamic_shadow_saved_projection[4][4];
+
+static void gfx_set_dynamic_shadow_material(bool enabled) {
+    if (dynamic_shadow_material != enabled) {
+        gfx_flush();
+        dynamic_shadow_material = enabled;
+        gfx_citro3d_set_dynamic_shadow_stencil(enabled);
+    }
+}
+
+static void gfx_set_dynamic_shadow_pass(uint32_t pass) {
+    if ((pass & 0xFFFFFF00u) != DYNAMIC_SHADOW_GFX_PASS_MAGIC || dynamic_shadow_pass == pass) {
+        return;
+    }
+
+    gfx_flush();
+    if (pass == DYNAMIC_SHADOW_GFX_PASS_DEPTH) {
+        gfx_dynamic_shadow_reset_caster_bounds();
+        memcpy(dynamic_shadow_saved_projection, rsp.P_matrix, sizeof(dynamic_shadow_saved_projection));
+        memset(rsp.P_matrix, 0, sizeof(rsp.P_matrix));
+        rsp.P_matrix[0][0] = 1.0f;
+        rsp.P_matrix[1][1] = 1.0f;
+        rsp.P_matrix[2][2] = 1.0f;
+        rsp.P_matrix[3][3] = 1.0f;
+        gfx_matrix_mul(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
+    } else if (dynamic_shadow_pass == DYNAMIC_SHADOW_GFX_PASS_DEPTH) {
+        memcpy(rsp.P_matrix, dynamic_shadow_saved_projection, sizeof(rsp.P_matrix));
+        gfx_matrix_mul(rsp.MP_matrix, rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1], rsp.P_matrix);
+    }
+
+    dynamic_shadow_pass = pass;
+    gfx_rapi->set_dynamic_shadow_pass(pass);
+}
+
+static void gfx_set_dynamic_shadow_receiver_marking(bool enabled) {
+    if (dynamic_shadow_receiver_marking_enabled == enabled) {
+        return;
+    }
+
+    gfx_flush();
+    dynamic_shadow_receiver_marking_enabled = enabled;
+    if (!enabled && rendering_state.dynamic_shadow_receiver) {
+        gfx_rapi->set_dynamic_shadow_receiver(false);
+        rendering_state.dynamic_shadow_receiver = false;
+    }
+}
+
+static void gfx_set_dynamic_shadow_receiver_mask(uint8_t mode) {
+    if (dynamic_shadow_receiver_mask_mode == mode) {
+        return;
+    }
+
+    gfx_flush();
+    dynamic_shadow_receiver_mask_mode = mode;
+    if (rendering_state.dynamic_shadow_receiver) {
+        gfx_rapi->set_dynamic_shadow_receiver(false);
+        rendering_state.dynamic_shadow_receiver = false;
+    }
+    gfx_rapi->set_dynamic_shadow_mask(mode);
+}
+
 static void gfx_set_is_hud(bool is_hud)
 {
     n64_native_res = is_hud;
@@ -631,6 +775,18 @@ static float gfx_adjust_x_for_aspect_ratio(float x) {
 
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *vertices) {
     profiler_3ds_log_time(0);
+#ifdef TARGET_N3DS
+    float dynamic_shadow_world_mtx[4][4];
+    float dynamic_shadow_light_mp[4][4];
+    bool dynamic_shadow_has_light_mtx = gDynamicShadowLightMtxReady != 0;
+
+    if (dynamic_shadow_has_light_mtx) {
+        gfx_matrix_mul(dynamic_shadow_world_mtx,
+                       rsp.modelview_matrix_stack[rsp.modelview_matrix_stack_size - 1],
+                       gDynamicShadowCameraInvMtx);
+        gfx_matrix_mul(dynamic_shadow_light_mp, dynamic_shadow_world_mtx, gDynamicShadowLightVpMtx);
+    }
+#endif
 
     for (size_t i = 0; i < n_vertices; i++, dest_index++) {
         const Vtx_t *v = &vertices[i].v;
@@ -642,7 +798,37 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         float z = v->ob[0] * rsp.MP_matrix[0][2] + v->ob[1] * rsp.MP_matrix[1][2] + v->ob[2] * rsp.MP_matrix[2][2] + rsp.MP_matrix[3][2];
         float w = v->ob[0] * rsp.MP_matrix[0][3] + v->ob[1] * rsp.MP_matrix[1][3] + v->ob[2] * rsp.MP_matrix[2][3] + rsp.MP_matrix[3][3];
 
+#ifdef TARGET_N3DS
+        if (dynamic_shadow_pass == DYNAMIC_SHADOW_GFX_PASS_DEPTH) {
+            gfx_dynamic_shadow_include_caster_vertex(x, y, w);
+        }
+#endif
+
+#ifdef TARGET_N3DS
+        if (dynamic_shadow_pass != DYNAMIC_SHADOW_GFX_PASS_DEPTH) {
+            x = gfx_adjust_x_for_aspect_ratio(x);
+        }
+#else
         x = gfx_adjust_x_for_aspect_ratio(x);
+#endif
+
+#ifdef TARGET_N3DS
+        if (dynamic_shadow_has_light_mtx) {
+            float lx = v->ob[0] * dynamic_shadow_light_mp[0][0] + v->ob[1] * dynamic_shadow_light_mp[1][0] + v->ob[2] * dynamic_shadow_light_mp[2][0] + dynamic_shadow_light_mp[3][0];
+            float ly = v->ob[0] * dynamic_shadow_light_mp[0][1] + v->ob[1] * dynamic_shadow_light_mp[1][1] + v->ob[2] * dynamic_shadow_light_mp[2][1] + dynamic_shadow_light_mp[3][1];
+            float lz = v->ob[0] * dynamic_shadow_light_mp[0][2] + v->ob[1] * dynamic_shadow_light_mp[1][2] + v->ob[2] * dynamic_shadow_light_mp[2][2] + dynamic_shadow_light_mp[3][2];
+            float lw = v->ob[0] * dynamic_shadow_light_mp[0][3] + v->ob[1] * dynamic_shadow_light_mp[1][3] + v->ob[2] * dynamic_shadow_light_mp[2][3] + dynamic_shadow_light_mp[3][3];
+            float inv_lw = fabsf(lw) < 0.001f ? 1.0f : 1.0f / lw;
+
+            d->light_u = lx * inv_lw * 0.5f + 0.5f;
+            d->light_v = ly * inv_lw * 0.5f + 0.5f;
+            d->light_depth = 0.5f - lz * inv_lw * 0.5f;
+        } else {
+            d->light_u = 0.0f;
+            d->light_v = 0.0f;
+            d->light_depth = 0.0f;
+        }
+#endif
 
         short U = v->tc[0] * rsp.texture_scaling_factor.s >> 16;
         short V = v->tc[1] * rsp.texture_scaling_factor.t >> 16;
@@ -749,6 +935,15 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         } else {
             d->color.a = v->cn[3];
         }
+
+#ifdef TARGET_N3DS
+        if (dynamic_shadow_material) {
+            d->color.r = 0;
+            d->color.g = 0;
+            d->color.b = 0;
+            d->color.a = DYNAMIC_SHADOW_MODEL_ALPHA;
+        }
+#endif
     }
     profiler_3ds_log_time(6); // gfx_sp_vertex
 }
@@ -767,7 +962,11 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         return;
     }
 
-    if (rsp.geometry_mode & G_CULL_BOTH) {
+    if (
+#ifdef TARGET_N3DS
+        !dynamic_shadow_material && dynamic_shadow_pass != DYNAMIC_SHADOW_GFX_PASS_DEPTH &&
+#endif
+        (rsp.geometry_mode & G_CULL_BOTH)) {
 
         // Calculating these here saves a few divides, and divides on 3DS are painfully slow.
         // GCC is smart enough to only do 6 divides, but we can do 3.
@@ -814,6 +1013,14 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     }
 
     bool depth_test = (rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER;
+#ifdef TARGET_N3DS
+    bool dynamic_shadow_depth_pass = dynamic_shadow_pass == DYNAMIC_SHADOW_GFX_PASS_DEPTH;
+    bool dynamic_shadow_receiver_pass = dynamic_shadow_pass == DYNAMIC_SHADOW_GFX_PASS_RECEIVER;
+
+    if (dynamic_shadow_depth_pass) {
+        depth_test = true;
+    }
+#endif
     if (depth_test != rendering_state.depth_test) {
         gfx_flush();
         gfx_rapi->set_depth_test(depth_test);
@@ -821,6 +1028,14 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     }
 
     bool z_upd = (rdp.other_mode_l & Z_UPD) == Z_UPD;
+#ifdef TARGET_N3DS
+    if (dynamic_shadow_depth_pass) {
+        z_upd = true;
+    }
+    if (dynamic_shadow_material || dynamic_shadow_receiver_pass) {
+        z_upd = false;
+    }
+#endif
     if (z_upd != rendering_state.depth_mask) {
         gfx_flush();
         gfx_rapi->set_depth_mask(z_upd);
@@ -828,6 +1043,11 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     }
 
     bool zmode_decal = (rdp.other_mode_l & ZMODE_DEC) == ZMODE_DEC;
+#ifdef TARGET_N3DS
+    if (dynamic_shadow_material) {
+        zmode_decal = true;
+    }
+#endif
     if (zmode_decal != rendering_state.decal_mode) {
         gfx_flush();
         gfx_rapi->set_zmode_decal(zmode_decal);
@@ -855,9 +1075,48 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     bool texture_edge = (rdp.other_mode_l & CVG_X_ALPHA) == CVG_X_ALPHA;
     bool use_noise = (rdp.other_mode_l & G_AC_DITHER) == G_AC_DITHER;
 
+#ifdef TARGET_N3DS
+    bool receiver_opaque_for_shadow = !texture_edge && (!use_alpha || use_fog);
+
+    if (dynamic_shadow_receiver_pass) {
+        bool receiver_candidate = depth_test && receiver_opaque_for_shadow
+            && gDynamicShadowLightMtxReady != 0;
+        if (!receiver_candidate || !gfx_dynamic_shadow_receiver_tri_in_range(v_arr)) {
+            return;
+        }
+        cc_id = color_comb(0, 0, 0, G_CCMUX_TEXEL0) |
+                (color_comb(0, 0, 0, G_ACMUX_SHADE) << 12);
+        use_alpha = true;
+        use_fog = false;
+        texture_edge = false;
+        use_noise = false;
+    } else if (dynamic_shadow_material || dynamic_shadow_depth_pass) {
+        cc_id = color_comb(0, 0, 0, G_CCMUX_SHADE) |
+                (color_comb(0, 0, 0, G_ACMUX_SHADE) << 12);
+        use_alpha = dynamic_shadow_material;
+        use_fog = false;
+        texture_edge = false;
+        use_noise = false;
+    }
+#endif
+
     if (texture_edge) {
         use_alpha = true;
     }
+
+#ifdef TARGET_N3DS
+    bool dynamic_shadow_receiver = dynamic_shadow_receiver_mask_mode == 0
+        && dynamic_shadow_receiver_marking_enabled && depth_test
+        && !dynamic_shadow_material && !dynamic_shadow_receiver_pass && receiver_opaque_for_shadow;
+    if (dynamic_shadow_receiver != rendering_state.dynamic_shadow_receiver) {
+        gfx_flush();
+        gfx_rapi->set_dynamic_shadow_receiver(dynamic_shadow_receiver);
+        rendering_state.dynamic_shadow_receiver = dynamic_shadow_receiver;
+    }
+    if (dynamic_shadow_receiver) {
+        gDynamicShadowDebugReceiverTris++;
+    }
+#endif
 
     if (use_alpha) cc_id |= SHADER_OPT_ALPHA;
     if (use_fog) cc_id |= SHADER_OPT_FOG;
@@ -887,6 +1146,11 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
 
     for (int i = 0; i < 2; i++) {
         if (used_textures[i]) {
+#ifdef TARGET_N3DS
+            if (dynamic_shadow_receiver_pass) {
+                continue;
+            }
+#endif
             if (rdp.textures_changed[i]) {
                 gfx_flush();
                 import_texture(i);
@@ -914,7 +1178,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
     for (int i = 0; i < 3; i++) {
 
 #ifdef TARGET_N3DS
-        float w = v_arr[i]->w, z = (v_arr[i]->z + w) / -2.0f; // 3DS is always 0 to 1
+        float w = v_arr[i]->w;
+        float z = (v_arr[i]->z + w) / -2.0f; // 3DS is always 0 to 1 and flipped.
 #else
         float z = v_arr[i]->z, w = v_arr[i]->w;
         if (z_is_from_0_to_1) {
@@ -928,6 +1193,14 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         buf_vbo[buf_vbo_len++] = w;
 
         if (use_texture) {
+#ifdef TARGET_N3DS
+            if (dynamic_shadow_receiver_pass) {
+                buf_vbo[buf_vbo_len++] = v_arr[i]->light_u;
+                buf_vbo[buf_vbo_len++] = v_arr[i]->light_v;
+                buf_vbo[buf_vbo_len++] = v_arr[i]->light_depth;
+            } else
+#endif
+            {
             float u = (v_arr[i]->u - rdp.texture_tile.uls * 8) / 32.0f;
             float v = (v_arr[i]->v - rdp.texture_tile.ult * 8) / 32.0f;
             if ((rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT) {
@@ -937,6 +1210,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
             }
             buf_vbo[buf_vbo_len++] = u / tex_width;
             buf_vbo[buf_vbo_len++] = v / tex_height;
+            }
         }
 #ifndef TARGET_N3DS
         if (use_fog) {
@@ -979,6 +1253,11 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
                     buf_vbo[buf_vbo_len++] = color->g / 255.0f;
                     buf_vbo[buf_vbo_len++] = color->b / 255.0f;
                 } else {
+#ifdef TARGET_N3DS
+                    if (dynamic_shadow_receiver_pass && color == &v_arr[i]->color) {
+                        buf_vbo[buf_vbo_len++] = 1.0f;
+                    } else
+#endif
                     if (use_fog && color == &v_arr[i]->color) {
                         // Shade alpha is 100% for fog
                         buf_vbo[buf_vbo_len++] = 1.0f;
@@ -1644,7 +1923,17 @@ static void gfx_run_dl(Gfx* cmd) {
                 gfx_set_2d(cmd->words.w1);
                 break;
             case G_SPECIAL_2:
-                gfx_flush();
+                if ((cmd->words.w1 & 0xFFFFFF00u) == DYNAMIC_SHADOW_GFX_MAGIC) {
+                    gfx_set_dynamic_shadow_material((cmd->words.w1 & 1u) != 0);
+                } else if ((cmd->words.w1 & 0xFFFFFF00u) == DYNAMIC_SHADOW_GFX_PASS_MAGIC) {
+                    gfx_set_dynamic_shadow_pass(cmd->words.w1);
+                } else if ((cmd->words.w1 & 0xFFFFFF00u) == DYNAMIC_SHADOW_GFX_RECEIVER_MAGIC) {
+                    gfx_set_dynamic_shadow_receiver_marking((cmd->words.w1 & 1u) != 0);
+                } else if ((cmd->words.w1 & 0xFFFFFF00u) == DYNAMIC_SHADOW_GFX_MASK_MAGIC) {
+                    gfx_set_dynamic_shadow_receiver_mask(cmd->words.w1 & 0xFFu);
+                } else {
+                    gfx_flush();
+                }
                 break;
             case G_SPECIAL_4:
                 gfx_set_iod(cmd->words.w1);

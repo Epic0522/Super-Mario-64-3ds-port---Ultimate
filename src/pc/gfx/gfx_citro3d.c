@@ -15,9 +15,14 @@
 
 #include "gfx_citro3d.h"
 #include "color_conversion.h"
+#include "enhancements/dynamic_shadows.h"
 
 #define TEXTURE_POOL_SIZE 4096
 #define FOG_LUT_SIZE 32
+#define DYNAMIC_SHADOWMAP_SIZE 256
+#define DYNAMIC_SHADOW_RECEIVER_STENCIL 0x01
+#define DYNAMIC_SHADOW_CLEAR_DEPTH_STENCIL 0xFFFFFFFF
+#define DYNAMIC_SHADOW_RECEIVER_VERTEX_SIZE 11
 
 #define NTSC_FRAMERATE(fps) ((float) fps * (1000.0f / 1001.0f))
 
@@ -25,10 +30,16 @@ static Gfx3DSMode sCurrentGfx3DSMode = GFX_3DS_MODE_NORMAL;
 
 static DVLB_s* sVShaderDvlb;
 static shaderProgram_s sShaderProgram;
+static DVLB_s* sShadowShaderDvlb;
+static shaderProgram_s sShadowShaderProgram;
+static int uLoc_shadowProjection, uLoc_shadowModelView;
 static float* sVboBuffer;
+static float* sShadowReceiverVboBuffer;
 
 extern const u8 shader_shbin[];
 extern const u32 shader_shbin_size;
+extern const u8 shadow_shbin[];
+extern const u32 shadow_shbin_size;
 
 struct ShaderProgram {
     uint32_t shader_id;
@@ -70,6 +81,17 @@ static bool sDepthTestOn = false;
 static bool sDepthUpdateOn = true;
 static bool sDepthDecal = false;
 static bool sUseBlend = false;
+static bool sDynamicShadowStencil = false;
+static bool sReceiverStencil = false;
+static bool sReceiverStencilTest = false;
+static bool sDynamicShadowReceiver = false;
+static uint8_t sDynamicShadowMaskMode = 0;
+static uint8_t sDynamicShadowStencilRef = DYNAMIC_SHADOW_RECEIVER_STENCIL;
+static bool sDynamicShadowDepthPass = false;
+static bool sDynamicShadowReceiverPass = false;
+static bool sDynamicShadowMapReady = false;
+static C3D_Tex sDynamicShadowMapTex;
+static C3D_RenderTarget *sDynamicShadowMapTarget;
 
 // calling FrameDrawOn resets viewport
 static int viewport_x, viewport_y;
@@ -87,6 +109,11 @@ static int sOrigBufIdx;
 static int s2DMode;
 float iodZ = 8.0f;
 float iodW = 16.0f;
+
+static void applyBlend(void);
+static void gfx_citro3d_configure_normal_vertex_layout(void);
+static void gfx_citro3d_configure_shadow_receiver_vertex_layout(void);
+static void gfx_citro3d_apply_screen_modelview(void);
 
 // Data storage type for the screen clear buf configs
 union ScreenClearBufConfig3ds {
@@ -123,16 +150,19 @@ static void clear_buffers()
 
     // Clear top screen
     if (clear_top)
-        C3D_RenderTargetClear(gTarget, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTarget, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top,
+                              DYNAMIC_SHADOW_CLEAR_DEPTH_STENCIL);
         
     // Clear right-eye view
     // We check gGfx3DSMode because clearing in 800px modes causes a crash.
     if (clear_top && (gGfx3DSMode == GFX_3DS_MODE_NORMAL || gGfx3DSMode == GFX_3DS_MODE_AA_22))
-        C3D_RenderTargetClear(gTargetRight, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTargetRight, (C3D_ClearBits) clear_top, screen_clear_colors.struc.top,
+                              DYNAMIC_SHADOW_CLEAR_DEPTH_STENCIL);
 
     // Clear bottom screen only if it needs re-rendering.
     if (clear_bottom)
-        C3D_RenderTargetClear(gTargetBottom, (C3D_ClearBits) clear_bottom, screen_clear_colors.struc.bottom, 0xFFFFFFFF);
+        C3D_RenderTargetClear(gTargetBottom, (C3D_ClearBits) clear_bottom, screen_clear_colors.struc.bottom,
+                              DYNAMIC_SHADOW_CLEAR_DEPTH_STENCIL);
 }
 
 void stereoTilt(C3D_Mtx* mtx, float z, float w)
@@ -206,6 +236,32 @@ static bool gfx_citro3d_z_is_from_0_to_1(void)
 static void gfx_citro3d_vertex_array_set_attribs(struct ShaderProgram *prg)
 {
     sVtxUnitSize = prg->num_floats;
+}
+
+static void gfx_citro3d_configure_normal_vertex_layout(void)
+{
+    C3D_AttrInfo* attrInfo = C3D_GetAttrInfo();
+    AttrInfo_Init(attrInfo);
+    AttrInfo_AddLoader(attrInfo, 0, GPU_FLOAT, 4); // v0=position
+    AttrInfo_AddLoader(attrInfo, 1, GPU_FLOAT, 2); // v1=texcoord
+    AttrInfo_AddLoader(attrInfo, 2, GPU_FLOAT, 4); // v2=color
+
+    C3D_BufInfo* bufInfo = C3D_GetBufInfo();
+    BufInfo_Init(bufInfo);
+    BufInfo_Add(bufInfo, sVboBuffer, VERTEX_SHADER_SIZE * 4, 3, 0x210);
+}
+
+static void gfx_citro3d_configure_shadow_receiver_vertex_layout(void)
+{
+    C3D_AttrInfo* attrInfo = C3D_GetAttrInfo();
+    AttrInfo_Init(attrInfo);
+    AttrInfo_AddLoader(attrInfo, 0, GPU_FLOAT, 4); // v0=position
+    AttrInfo_AddLoader(attrInfo, 1, GPU_FLOAT, 3); // v1=shadow uv + compare depth
+    AttrInfo_AddLoader(attrInfo, 2, GPU_FLOAT, 4); // v2=color
+
+    C3D_BufInfo* bufInfo = C3D_GetBufInfo();
+    BufInfo_Init(bufInfo);
+    BufInfo_Add(bufInfo, sShadowReceiverVboBuffer, DYNAMIC_SHADOW_RECEIVER_VERTEX_SIZE * 4, 3, 0x210);
 }
 
 static void gfx_citro3d_unload_shader(UNUSED struct ShaderProgram *old_prg)
@@ -551,6 +607,172 @@ static void update_depth()
     C3D_DepthMap(true, -1.0f, sDepthDecal ? -0.001f : 0);
 }
 
+static void gfx_citro3d_init_dynamic_shadowmap(void)
+{
+    if (sDynamicShadowMapReady)
+        return;
+
+    if (!C3D_TexInitShadow(&sDynamicShadowMapTex, DYNAMIC_SHADOWMAP_SIZE, DYNAMIC_SHADOWMAP_SIZE)) {
+        printf("Dynamic shadowmap texture init failed\n");
+        return;
+    }
+
+    C3D_TexSetFilter(&sDynamicShadowMapTex, GPU_NEAREST, GPU_NEAREST);
+    C3D_TexSetWrap(&sDynamicShadowMapTex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
+    sDynamicShadowMapTex.param |= GPU_TEXTURE_SHADOW_PARAM;
+    C3D_TexShadowParams(false, 0.0125f);
+
+    sDynamicShadowMapTarget =
+        C3D_RenderTargetCreateFromTex(&sDynamicShadowMapTex, GPU_TEXFACE_2D, 0, GPU_RB_DEPTH24);
+    if (sDynamicShadowMapTarget == NULL) {
+        C3D_TexDelete(&sDynamicShadowMapTex);
+        printf("Dynamic shadowmap render target init failed\n");
+        return;
+    }
+
+    sDynamicShadowMapReady = true;
+}
+
+bool gfx_citro3d_dynamic_shadowmap_available(void)
+{
+    return sDynamicShadowMapReady && sDynamicShadowMapTarget != NULL;
+}
+
+static void gfx_citro3d_apply_dynamic_shadow_stencil(void)
+{
+    if (sDynamicShadowMaskMode != 0) {
+        C3D_StencilTest(true, GPU_ALWAYS, sDynamicShadowMaskMode, 0xFF, 0xFF);
+        C3D_StencilOp(GPU_STENCIL_KEEP, GPU_STENCIL_KEEP, GPU_STENCIL_REPLACE);
+    } else if (sDynamicShadowStencil) {
+        C3D_StencilTest(true, GPU_EQUAL, sDynamicShadowStencilRef, 0xFF, 0xFF);
+        C3D_StencilOp(GPU_STENCIL_KEEP, GPU_STENCIL_KEEP, GPU_STENCIL_ZERO);
+    } else if (sReceiverStencilTest) {
+        C3D_StencilTest(true, GPU_EQUAL, DYNAMIC_SHADOW_RECEIVER_STENCIL, 0xFF, 0xFF);
+        C3D_StencilOp(GPU_STENCIL_KEEP, GPU_STENCIL_KEEP, GPU_STENCIL_KEEP);
+    } else if (sReceiverStencil) {
+        C3D_StencilTest(true, GPU_ALWAYS, DYNAMIC_SHADOW_RECEIVER_STENCIL, 0xFF, 0xFF);
+        C3D_StencilOp(GPU_STENCIL_KEEP, GPU_STENCIL_KEEP, GPU_STENCIL_REPLACE);
+    } else {
+        C3D_StencilTest(false, GPU_ALWAYS, 0, 0xFF, 0xFF);
+        C3D_StencilOp(GPU_STENCIL_KEEP, GPU_STENCIL_KEEP, GPU_STENCIL_KEEP);
+    }
+}
+
+void gfx_citro3d_set_dynamic_shadow_stencil(bool enabled)
+{
+    if (sDynamicShadowStencil == enabled)
+        return;
+
+    sDynamicShadowStencil = enabled;
+    gfx_citro3d_apply_dynamic_shadow_stencil();
+}
+
+static void gfx_citro3d_set_dynamic_shadow_receiver(bool enabled)
+{
+    sDynamicShadowReceiver = enabled;
+}
+
+static void gfx_citro3d_set_dynamic_shadow_mask(uint8_t mode)
+{
+    if (sDynamicShadowMaskMode == mode)
+        return;
+
+    sDynamicShadowMaskMode = mode;
+    if (mode != 0) {
+        sDynamicShadowStencilRef = mode;
+        C3D_AlphaTest(false, GPU_ALWAYS, 0x00);
+        C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ZERO, GPU_ONE,
+                       GPU_ZERO, GPU_ONE);
+        C3D_DepthTest(true, GPU_LEQUAL, (GPU_WRITEMASK) 0);
+    } else {
+        C3D_AlphaTest(true, GPU_GREATER, 0x00);
+        update_depth();
+        applyBlend();
+    }
+    gfx_citro3d_apply_dynamic_shadow_stencil();
+}
+
+static void gfx_citro3d_set_receiver_stencil(bool enabled)
+{
+    if (sReceiverStencil == enabled)
+        return;
+
+    sReceiverStencil = enabled;
+    gfx_citro3d_apply_dynamic_shadow_stencil();
+}
+
+static void gfx_citro3d_set_receiver_stencil_test(bool enabled)
+{
+    if (sReceiverStencilTest == enabled)
+        return;
+
+    sReceiverStencilTest = enabled;
+    gfx_citro3d_apply_dynamic_shadow_stencil();
+}
+
+static void gfx_citro3d_set_dynamic_shadow_pass(uint32_t pass)
+{
+    C3D_Mtx identity;
+
+    sDynamicShadowDepthPass = false;
+    sDynamicShadowReceiverPass = false;
+    if (pass != DYNAMIC_SHADOW_GFX_PASS_RECEIVER) {
+        sReceiverStencilTest = false;
+    }
+    C3D_FragOpMode(GPU_FRAGOPMODE_GL);
+    C3D_AlphaTest(true, GPU_GREATER, 0x00);
+    applyBlend();
+    update_depth();
+    gfx_citro3d_apply_dynamic_shadow_stencil();
+    gfx_citro3d_apply_screen_modelview();
+
+    if ((pass & 0xFFFFFF00u) != DYNAMIC_SHADOW_GFX_PASS_MAGIC) {
+        return;
+    }
+
+    if (pass == DYNAMIC_SHADOW_GFX_PASS_DEPTH && gfx_citro3d_dynamic_shadowmap_available()) {
+        sDynamicShadowDepthPass = true;
+        sDynamicShadowStencil = false;
+        sReceiverStencil = false;
+        sReceiverStencilTest = false;
+        gfx_citro3d_apply_dynamic_shadow_stencil();
+        C3D_AlphaTest(false, GPU_ALWAYS, 0x00);
+        C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
+        C3D_FragOpMode(GPU_FRAGOPMODE_SHADOW);
+        C3D_FragOpShadow(1.0f, 0.0f);
+        C3D_DepthTest(true, GPU_LEQUAL, GPU_WRITE_ALL);
+        C3D_FrameDrawOn(sDynamicShadowMapTarget);
+        C3D_RenderTargetClear(sDynamicShadowMapTarget,
+                              C3D_CLEAR_COLOR | C3D_CLEAR_DEPTH,
+                              0xFFFFFFFF,
+                              DYNAMIC_SHADOW_CLEAR_DEPTH_STENCIL);
+        C3D_SetViewport(0, 0, DYNAMIC_SHADOWMAP_SIZE, DYNAMIC_SHADOWMAP_SIZE);
+        Mtx_Identity(&identity);
+        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &identity);
+        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &identity);
+    } else if (pass == DYNAMIC_SHADOW_GFX_PASS_RECEIVER && gfx_citro3d_dynamic_shadowmap_available()) {
+        sDynamicShadowReceiverPass = true;
+        sReceiverStencil = false;
+        sReceiverStencilTest = true;
+        gfx_citro3d_apply_dynamic_shadow_stencil();
+        C3D_FragOpMode(GPU_FRAGOPMODE_GL);
+        C3D_FrameDrawOn(gTarget);
+        C3D_SetViewport(viewport_y, viewport_x, viewport_height, viewport_width);
+        C3D_DepthTest(false, GPU_LEQUAL, GPU_WRITE_COLOR);
+        C3D_AlphaTest(true, GPU_GREATER, 0x00);
+        applyBlend();
+    }
+}
+
+static void gfx_citro3d_apply_screen_modelview(void)
+{
+    Mtx_Identity(&modelView);
+    Mtx_RotateZ(&modelView, 0.75f*M_TAU, false);
+    Mtx_Identity(&projection);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &modelView);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
+}
+
 static void gfx_citro3d_set_depth_test(bool depth_test)
 {
     sDepthTestOn = depth_test;
@@ -732,23 +954,40 @@ static void renderTwoColorTris(float buf_vbo[], size_t buf_vbo_len, size_t buf_v
 
 static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
-    if (sBufIdx * VERTEX_SHADER_SIZE > 1 * 1024 * 1024 / 4)
+    bool shadowReceiverPass = sDynamicShadowReceiverPass && sShadowShaderDvlb != NULL;
+    if (sDynamicShadowDepthPass) {
+        gDynamicShadowDebugDepthTris += buf_vbo_num_tris;
+    } else if (shadowReceiverPass) {
+        gDynamicShadowDebugReceiverTris += buf_vbo_num_tris;
+    }
+
+    if (!shadowReceiverPass && sBufIdx * VERTEX_SHADER_SIZE > 1 * 1024 * 1024 / 4)
     {
         printf("Vertex buffer full!\n");
         return;
     }
 
-    if (sShaderProgramPool[sCurShader].cc_features.num_inputs > 1)
+    if (!shadowReceiverPass && sShaderProgramPool[sCurShader].cc_features.num_inputs > 1)
     {
         renderTwoColorTris(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
         return;
     }
 
     int offset = 0;
-    float* dst = &((float*)sVboBuffer)[sBufIdx * VERTEX_SHADER_SIZE];
+    float* dst = shadowReceiverPass ? sShadowReceiverVboBuffer : &((float*)sVboBuffer)[sBufIdx * VERTEX_SHADER_SIZE];
     bool hasTex = sShaderProgramPool[sCurShader].cc_features.used_textures[0] || sShaderProgramPool[sCurShader].cc_features.used_textures[1];
     bool hasColor = sShaderProgramPool[sCurShader].cc_features.num_inputs > 0;
     bool hasAlpha = sShaderProgramPool[sCurShader].cc_features.opt_alpha;
+
+    if (shadowReceiverPass) {
+        if (buf_vbo_num_tris * 3 * DYNAMIC_SHADOW_RECEIVER_VERTEX_SIZE > 1 * 1024 * 1024 / 4) {
+            printf("Shadow receiver vertex buffer full!\n");
+            return;
+        }
+        hasTex = true;
+        hasColor = true;
+        hasAlpha = true;
+    }
     for (u32 i = 0; i < 3 * buf_vbo_num_tris; i++)
     {
         *dst++ = buf_vbo[offset + 0];
@@ -758,8 +997,14 @@ static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size
         int vtxOffs = 4;
         if (hasTex)
         {
-            *dst++ = buf_vbo[offset + vtxOffs++] * sTexturePoolScaleS[sCurTex];
-            *dst++ = 1 - (buf_vbo[offset + vtxOffs++] * sTexturePoolScaleT[sCurTex]);
+            if (shadowReceiverPass) {
+                *dst++ = buf_vbo[offset + vtxOffs++];
+                *dst++ = buf_vbo[offset + vtxOffs++];
+                *dst++ = buf_vbo[offset + vtxOffs++];
+            } else {
+                *dst++ = buf_vbo[offset + vtxOffs++] * sTexturePoolScaleS[sCurTex];
+                *dst++ = 1 - (buf_vbo[offset + vtxOffs++] * sTexturePoolScaleT[sCurTex]);
+            }
         }
         else
         {
@@ -781,11 +1026,39 @@ static void gfx_citro3d_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size
             *dst++ = 1.0f;
         }
 
-        offset += sVtxUnitSize;
+        offset += shadowReceiverPass ? DYNAMIC_SHADOW_RECEIVER_VERTEX_SIZE : sVtxUnitSize;
     }
 
-    C3D_DrawArrays(GPU_TRIANGLES, sBufIdx, buf_vbo_num_tris * 3);
-    sBufIdx += buf_vbo_num_tris * 3;
+    if (shadowReceiverPass) {
+        gfx_citro3d_configure_shadow_receiver_vertex_layout();
+        C3D_BindProgram(&sShadowShaderProgram);
+        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_shadowModelView, &modelView);
+        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_shadowProjection, &projection);
+        C3D_TexBind(0, &sDynamicShadowMapTex);
+        C3D_TexShadowParams(false, 0.0125f);
+        C3D_FragOpMode(GPU_FRAGOPMODE_GL);
+
+        C3D_TexEnv* env = C3D_GetTexEnv(0);
+        C3D_TexEnvInit(env);
+        C3D_TexEnvColor(env, 0x88000000);
+        C3D_TexEnvFunc(env, C3D_RGB, GPU_REPLACE);
+        C3D_TexEnvSrc(env, C3D_RGB, GPU_CONSTANT, 0, 0);
+        C3D_TexEnvOpRgb(env, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR);
+        C3D_TexEnvFunc(env, C3D_Alpha, GPU_MODULATE);
+        C3D_TexEnvSrc(env, C3D_Alpha, GPU_CONSTANT, GPU_TEXTURE0, 0);
+        C3D_TexEnvOpAlpha(env, GPU_TEVOP_A_SRC_ALPHA, GPU_TEVOP_A_ONE_MINUS_SRC_R, GPU_TEVOP_A_SRC_ALPHA);
+    }
+
+    C3D_DrawArrays(GPU_TRIANGLES, shadowReceiverPass ? 0 : sBufIdx, buf_vbo_num_tris * 3);
+
+    if (shadowReceiverPass) {
+        C3D_FragOpMode(GPU_FRAGOPMODE_GL);
+        C3D_BindProgram(&sShaderProgram);
+        gfx_citro3d_configure_normal_vertex_layout();
+        update_shader(false);
+    } else {
+        sBufIdx += buf_vbo_num_tris * 3;
+    }
 }
 
 void gfx_citro3d_frame_draw_on(C3D_RenderTarget* target)
@@ -799,13 +1072,24 @@ void gfx_citro3d_frame_draw_on(C3D_RenderTarget* target)
 
 static void gfx_citro3d_draw_triangles_helper(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris)
 {
+    bool canReceiveDynamicShadow;
+
+    if (sDynamicShadowDepthPass) {
+        gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
+        return;
+    }
+
     if (sIsHud)
     {
+        gfx_citro3d_set_receiver_stencil(false);
         C3D_FrameDrawOn(gTargetBottom);
 
         gfx_citro3d_draw_triangles(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
         return;
     }
+    canReceiveDynamicShadow = sDynamicShadowMaskMode == 0
+        && !sDynamicShadowStencil && sDynamicShadowReceiver;
+    gfx_citro3d_set_receiver_stencil(canReceiveDynamicShadow);
     if (gGfx3DEnabled)
     {
         // left screen
@@ -835,25 +1119,29 @@ static void gfx_citro3d_init(void)
     uLoc_projection = shaderInstanceGetUniformLocation((&sShaderProgram)->vertexShader, "projection");
     uLoc_modelView = shaderInstanceGetUniformLocation((&sShaderProgram)->vertexShader, "modelView");
 
-    // Configure attributes for use with the vertex shader
-    C3D_AttrInfo* attrInfo = C3D_GetAttrInfo();
-    AttrInfo_Init(attrInfo);
-    AttrInfo_AddLoader(attrInfo, 0, GPU_FLOAT, 4); // v0=position
-    AttrInfo_AddLoader(attrInfo, 1, GPU_FLOAT, 2); // v1=texcoord
-    AttrInfo_AddLoader(attrInfo, 2, GPU_FLOAT, 4); // v2=color
+    sShadowShaderDvlb = DVLB_ParseFile((__3ds_u32*)shadow_shbin, shadow_shbin_size);
+    shaderProgramInit(&sShadowShaderProgram);
+    if (sShadowShaderDvlb != NULL) {
+        shaderProgramSetVsh(&sShadowShaderProgram, &sShadowShaderDvlb->DVLE[0]);
+        uLoc_shadowProjection = shaderInstanceGetUniformLocation((&sShadowShaderProgram)->vertexShader, "projection");
+        uLoc_shadowModelView = shaderInstanceGetUniformLocation((&sShadowShaderProgram)->vertexShader, "modelView");
+    }
 
     // Create 1MB VBO (vertex buffer object)
     sVboBuffer = linearAlloc(1 * 1024 * 1024);
+    sShadowReceiverVboBuffer = linearAlloc(1 * 1024 * 1024);
 
     // Configure buffers
-    C3D_BufInfo* bufInfo = C3D_GetBufInfo();
-    BufInfo_Init(bufInfo);
-    BufInfo_Add(bufInfo, sVboBuffer, VERTEX_SHADER_SIZE * 4, 3, 0x210);
+    gfx_citro3d_configure_normal_vertex_layout();
 
     C3D_CullFace(GPU_CULL_NONE);
     C3D_DepthMap(true, -1.0f, 0);
     C3D_DepthTest(false, GPU_LEQUAL, GPU_WRITE_ALL);
+    C3D_StencilTest(false, GPU_ALWAYS, 0, 0xFF, 0xFF);
+    C3D_StencilOp(GPU_STENCIL_KEEP, GPU_STENCIL_KEEP, GPU_STENCIL_KEEP);
     C3D_AlphaTest(true, GPU_GREATER, 0x00);
+
+    gfx_citro3d_init_dynamic_shadowmap();
 
 #ifdef VERSION_EU
     C3D_FrameRate(25);
@@ -870,6 +1158,10 @@ static void gfx_citro3d_start_frame(void)
 
     sBufIdx = 0;
     scissor = false;
+    sDynamicShadowMaskMode = 0;
+    C3D_AlphaTest(true, GPU_GREATER, 0x00);
+    update_depth();
+    applyBlend();
     // reset viewport if video mode changed
     if (gGfx3DSMode != sCurrentGfx3DSMode)
     {
@@ -882,6 +1174,11 @@ static void gfx_citro3d_start_frame(void)
     gfx_citro3d_set_viewport_clear_buffer(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_DEPTH);
 
     clear_buffers();
+    sDynamicShadowStencil = false;
+    sReceiverStencil = false;
+    sReceiverStencilTest = false;
+    sDynamicShadowReceiver = false;
+    gfx_citro3d_apply_dynamic_shadow_stencil();
 
     // bottom screen
     C3D_FrameDrawOn(gTargetBottom);
@@ -913,6 +1210,9 @@ static void gfx_citro3d_end_frame(void)
 {
     // set the texenv back
     update_shader(false);
+    gfx_citro3d_set_dynamic_shadow_stencil(false);
+    gfx_citro3d_set_receiver_stencil(false);
+    gfx_citro3d_set_receiver_stencil_test(false);
 
     C3D_FrameEnd(0); // Swap is handled automatically within this function
 }
@@ -1000,7 +1300,10 @@ struct GfxRenderingAPI gfx_citro3d_api = {
     gfx_citro3d_set_fog_color,
     gfx_citro3d_is_hud,
     gfx_citro3d_set_2d,
-    gfx_citro3d_set_iod
+    gfx_citro3d_set_iod,
+    gfx_citro3d_set_dynamic_shadow_receiver,
+    gfx_citro3d_set_dynamic_shadow_mask,
+    gfx_citro3d_set_dynamic_shadow_pass
 };
 
 #endif

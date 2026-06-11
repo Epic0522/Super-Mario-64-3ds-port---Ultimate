@@ -122,6 +122,11 @@ struct DisplayListNode
     void *transformInterpolated;
     void *displayList;
     void *displayListInterpolated;
+    Mtx *dynamicShadowMaskTransform;
+    Mtx *dynamicShadowMaskTransformInterpolated;
+    void *dynamicShadowMask;
+    u16 dynamicShadowGroup;
+    u8 dynamicShadow;
     struct DisplayListNode *next;
 };
 

@@ -917,13 +917,18 @@ $(BUILD_DIR)/src/pc/gfx/shader.shbin.o : src/pc/gfx/shader.v.pica
 	$(DEVKITPRO)/tools/bin/picasso -o $(BUILD_DIR)/src/pc/gfx/shader.shbin $<
 	$(DEVKITPRO)/tools/bin/bin2s $(BUILD_DIR)/src/pc/gfx/shader.shbin | $(AS) -o $@
 
+$(BUILD_DIR)/src/pc/gfx/shadow.shbin.o : src/pc/gfx/shadow.v.pica
+	$(eval CURBIN := $<.shbin)
+	$(DEVKITPRO)/tools/bin/picasso -o $(BUILD_DIR)/src/pc/gfx/shadow.shbin $<
+	$(DEVKITPRO)/tools/bin/bin2s $(BUILD_DIR)/src/pc/gfx/shadow.shbin | $(AS) -o $@
+
 SMDH_TITLE ?= Super Mario 64
 SMDH_DESCRIPTION ?= Super Mario 64 3DS Port
 SMDH_AUTHOR ?= mkst
 SMDH_ICON := 3ds/icon.smdh
 
-$(ELF): $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(BUILD_DIR)/src/pc/gfx/shader.shbin.o $(MINIMAP_O) $(SMDH_ICON)
-	$(LD) -L $(BUILD_DIR) -o $@ $(O_FILES) $(BUILD_DIR)/src/pc/gfx/shader.shbin.o $(MINIMAP_O) $(MINIMAP_T3X_O) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(LDFLAGS)
+$(ELF): $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(BUILD_DIR)/src/pc/gfx/shader.shbin.o $(BUILD_DIR)/src/pc/gfx/shadow.shbin.o $(MINIMAP_O) $(SMDH_ICON)
+	$(LD) -L $(BUILD_DIR) -o $@ $(O_FILES) $(BUILD_DIR)/src/pc/gfx/shader.shbin.o $(BUILD_DIR)/src/pc/gfx/shadow.shbin.o $(MINIMAP_O) $(MINIMAP_T3X_O) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(LDFLAGS)
 
 $(EXE): $(ELF)
 	3dsxtool $< $@ --smdh=$(BUILD_DIR)/$(SMDH_ICON)

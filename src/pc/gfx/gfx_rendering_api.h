@@ -36,6 +36,9 @@ struct GfxRenderingAPI {
     void (*set_is_hud)(bool is_hud);
     void (*set_2d)(int mode_2d);
     void (*set_iod)(float z, float w);
+    void (*set_dynamic_shadow_receiver)(bool enabled);
+    void (*set_dynamic_shadow_mask)(uint8_t mode);
+    void (*set_dynamic_shadow_pass)(uint32_t pass);
 #endif
 };
 

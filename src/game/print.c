@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "game_init.h"
+#include "macros.h"
 #include "memory.h"
 #include "print.h"
 #include "segment2.h"
@@ -181,6 +182,10 @@ void print_text_fmt_int(s32 x, s32 y, const char *str, s32 n) {
     s32 len = 0;
     s32 srcIndex = 0;
 
+    if (sTextLabelsCount >= ARRAY_COUNT(sTextLabels)) {
+        return;
+    }
+
     // Don't continue if there is no memory to do so.
     if ((sTextLabels[sTextLabelsCount] = mem_pool_alloc(gEffectsMemoryPool,
                                                         sizeof(struct TextLabel))) == NULL) {
@@ -232,6 +237,10 @@ void print_text(s32 x, s32 y, const char *str) {
     s32 length = 0;
     s32 srcIndex = 0;
 
+    if (sTextLabelsCount >= ARRAY_COUNT(sTextLabels)) {
+        return;
+    }
+
     // Don't continue if there is no memory to do so.
     if ((sTextLabels[sTextLabelsCount] = mem_pool_alloc(gEffectsMemoryPool,
                                                         sizeof(struct TextLabel))) == NULL) {
@@ -264,6 +273,10 @@ void print_text_centered(s32 x, s32 y, const char *str) {
     UNUSED s32 unused2 = 0;
     s32 length = 0;
     s32 srcIndex = 0;
+
+    if (sTextLabelsCount >= ARRAY_COUNT(sTextLabels)) {
+        return;
+    }
 
     // Don't continue if there is no memory to do so.
     if ((sTextLabels[sTextLabelsCount] = mem_pool_alloc(gEffectsMemoryPool,

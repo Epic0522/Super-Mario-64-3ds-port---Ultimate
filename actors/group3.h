@@ -3,6 +3,10 @@
 
 #include "types.h"
 
+// bobomb (shared sphere body for king_bobomb)
+extern const Gfx bobomb_body_sphere_dl_black[];
+extern const Gfx bobomb_body_sphere_dl_king_black[];
+
 // king_bobomb
 extern const GeoLayout king_bobomb_geo[];
 extern const Gfx king_bobomb_seg5_dl_0500A4B8[];

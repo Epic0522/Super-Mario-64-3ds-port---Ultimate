@@ -44,6 +44,8 @@ extern const Gfx bobomb_seg8_dl_08022D78[];
 extern const Gfx bobomb_seg8_dl_08023270[];
 extern const Gfx bobomb_seg8_dl_08023378[];
 extern const Gfx bobomb_seg8_dl_08023480[];
+extern const Gfx bobomb_body_sphere_dl[];
+extern const Gfx bobomb_body_sphere_dl_black[];
 extern const struct Animation *const bobomb_seg8_anims_0802396C[];
 
 // bowling_ball

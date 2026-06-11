@@ -507,6 +507,9 @@ void try_print_debug_mario_level_info(void) {
  * [5][7] (b7 in the string array) to 1 to enable debug spawn.
  */
 void try_do_mario_debug_object_spawn(void) {
+#ifdef TARGET_N3DS
+    return;
+#else
     UNUSED s32 unused;
 
     if (sDebugPage == DEBUG_PAGE_STAGEINFO && gDebugInfo[DEBUG_PAGE_ENEMYINFO][7] == 1) {
@@ -522,6 +525,7 @@ void try_do_mario_debug_object_spawn(void) {
                                   bhvKoopaShellUnderwater);
         }
     }
+#endif
 }
 
 // TODO: figure out what this is

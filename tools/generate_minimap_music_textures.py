@@ -49,6 +49,7 @@ for ch, width in zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ",
                      (6, 6, 6, 6, 6, 6, 5, 6, 6, 5, 8, 8, 6,
                       6, 6, 6, 6, 5, 6, 6, 8, 7, 6, 6, 6, 5)):
     CHAR_WIDTHS[ch] = width
+CHAR_WIDTHS["L"] = 5
 for ch, width in zip("abcdefghijklmnopqrstuvwxyz",
                      (6, 5, 5, 6, 5, 5, 6, 5, 4, 5, 5, 3, 7,
                       5, 5, 5, 6, 5, 5, 5, 5, 5, 7, 7, 5, 5)):
@@ -145,6 +146,19 @@ def render_note():
     return note
 
 
+def tint_sprite(sprite, color):
+    tinted = Image.new("RGBA", sprite.size, color)
+    tinted.putalpha(sprite.getchannel("A"))
+    return tinted
+
+
+def draw_sprite_with_shadow(out, sprite, pos):
+    x, y = pos
+    shadow = tint_sprite(sprite, (0, 0, 0, 160))
+    out.alpha_composite(shadow, (x + 1, y + 1))
+    out.alpha_composite(sprite, pos)
+
+
 def render_track(path, title, note):
     old = Image.open(path).convert("RGBA")
     canvas_w, canvas_h = old.size
@@ -180,14 +194,14 @@ def render_track(path, title, note):
     total_width = note.width + note_gap + text_width
     x = max(0, canvas_w - right_pad - total_width)
 
-    out.alpha_composite(note, (x, 0))
+    draw_sprite_with_shadow(out, note, (x, 0))
     x += note.width + note_gap
 
     for ch, glyph in glyphs:
         if glyph is None:
             x += space_width
         else:
-            out.alpha_composite(glyph, (x, 0))
+            draw_sprite_with_shadow(out, glyph, (x, 0))
             x += CHAR_WIDTHS.get(ch, glyph.width) + letter_gap
 
     bbox = out.getchannel("A").getbbox()

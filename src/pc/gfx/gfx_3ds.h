@@ -59,6 +59,9 @@ extern int uLoc_projection, uLoc_modelView;
 
 extern float gSliderLevel;
 
+void gfx_citro3d_set_dynamic_shadow_stencil(bool enabled);
+bool gfx_citro3d_dynamic_shadowmap_available(void);
+
 typedef enum
 {
     GFX_3DS_MODE_NORMAL,     // 400px no AA AND 400px 3D | !useAA && !useWide

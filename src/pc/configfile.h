@@ -24,6 +24,7 @@ extern unsigned int puppycam_invertY;
 extern unsigned int puppycam_degrade;
 extern unsigned int puppycam_aggression;
 extern unsigned int puppycam_panlevel;
+extern unsigned int dynamic_shadows_enabled;
 
 void configfile_load(const char *filename);
 void configfile_save(const char *filename);

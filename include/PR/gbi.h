@@ -4811,6 +4811,7 @@ typedef union {
 	Gfx *_g = (Gfx *)(pkt);	\
 									\
 	_g->words.w0 = _SHIFTL(G_SPECIAL_2, 24, 8); \
+	_g->words.w1 = 0; \
 }
 
 #define gDPSet2d(pkt, mode) \

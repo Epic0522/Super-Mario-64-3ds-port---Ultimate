@@ -720,6 +720,48 @@ f32 calc_y_to_curr_floor(f32 *posOff, f32 posMul, f32 posBound, f32 *focOff, f32
 //Compiler gets mad if I put this any further above. thanks refresh 7
 #include "../../enhancements/puppycam.inc.c"
 
+static u8 newcam_is_bowser_battle_level(void) {
+    return gCurrLevelNum == LEVEL_BOWSER_1 || gCurrLevelNum == LEVEL_BOWSER_2
+           || gCurrLevelNum == LEVEL_BOWSER_3;
+}
+
+static u8 newcam_official_control_locked(struct Camera *c) {
+    return c->cutscene != 0 || newcam_is_bowser_battle_level()
+           || c->mode == CAMERA_MODE_BOSS_FIGHT || c->defMode == CAMERA_MODE_BOSS_FIGHT
+           || sMarioCamState->cameraEvent != 0
+           || sMarioCamState->action == ACT_PULLING_DOOR
+           || sMarioCamState->action == ACT_PUSHING_DOOR
+           || sMarioCamState->action == ACT_ENTERING_STAR_DOOR
+           || sMarioCamState->action == ACT_UNLOCKING_KEY_DOOR
+           || SURFACE_IS_PAINTING_WARP(sMarioGeometry.currFloorType);
+}
+
+static void newcam_force_official_mode(struct Camera *c, s16 mode, u8 snapBehindMario) {
+    newcam_active = 0;
+    newcam_reset_player_offset();
+    newcam_set_official_hint(NEWCAM_HINT_NONE, c->pos, c->focus);
+
+    set_cam_angle(CAM_ANGLE_LAKITU);
+    c->mode = mode;
+    c->defMode = mode;
+    gLakituState.mode = mode;
+    gLakituState.defMode = mode;
+    sCButtonsPressed = 0;
+    sync_lakitu_state_to_camera(c);
+
+    (void) snapBehindMario;
+    skip_camera_interpolation();
+}
+
+static void newcam_force_official_for_cutscene(struct Camera *c) {
+    if (newcam_is_bowser_battle_level() || c->mode == CAMERA_MODE_BOSS_FIGHT
+        || c->defMode == CAMERA_MODE_BOSS_FIGHT) {
+        newcam_force_official_mode(c, CAMERA_MODE_BOSS_FIGHT, FALSE);
+    } else if (newcam_active || c->mode == CAM_MODE_NEWCAM || c->defMode == CAM_MODE_NEWCAM) {
+        newcam_force_official_mode(c, CAMERA_MODE_CLOSE, FALSE);
+    }
+}
+
 void focus_on_mario(Vec3f focus, Vec3f pos, f32 posYOff, f32 focYOff, f32 dist, s16 pitch, s16 yaw) {
     Vec3f marioPos;
 
@@ -3081,6 +3123,13 @@ void update_camera(struct Camera *c) {
     c->mode = gLakituState.mode;
     c->defMode = gLakituState.defMode;
 
+    u8 cameraControlsLocked = newcam_official_control_locked(c);
+    if (cameraControlsLocked && (newcam_active || c->mode == CAM_MODE_NEWCAM || c->defMode == CAM_MODE_NEWCAM)) {
+        newcam_force_official_for_cutscene(c);
+        cameraModePressed = 0;
+        cameraRecenterPressed = 0;
+    }
+
     if (!newcam_active && c->mode == CAM_MODE_NEWCAM) {
         c->mode = sModeInfo.lastMode == CAM_MODE_NEWCAM ? CAMERA_MODE_CLOSE : sModeInfo.lastMode;
         c->defMode = c->mode;
@@ -3090,7 +3139,7 @@ void update_camera(struct Camera *c) {
         sync_lakitu_state_to_camera(c);
     }
 
-    if (cameraModePressed && c->cutscene == 0) {
+    if (cameraModePressed && c->cutscene == 0 && !cameraControlsLocked) {
         newcam_active ^= 1;
         newcam_reset_player_offset();
         play_sound(SOUND_MENU_CHANGE_SELECT, gDefaultSoundArgs);
@@ -3113,11 +3162,10 @@ void update_camera(struct Camera *c) {
             sCButtonsPressed = 0;
             newcam_set_official_hint(NEWCAM_HINT_NONE, c->pos, c->focus);
             sync_lakitu_state_to_camera(c);
-            gCameraMovementFlags |= CAM_MOVE_INIT_CAMERA;
         }
     }
 
-    if (cameraRecenterPressed && c->cutscene == 0) {
+    if (cameraRecenterPressed && c->cutscene == 0 && !cameraControlsLocked) {
         if (newcam_active) {
             newcam_request_recenter_behind_mario();
         } else {
@@ -3127,7 +3175,7 @@ void update_camera(struct Camera *c) {
             gLakituState.mode = c->mode;
             gLakituState.defMode = c->defMode;
             sCButtonsPressed = 0;
-            gCameraMovementFlags |= CAM_MOVE_INIT_CAMERA;
+            cameraSnapBehindMario = TRUE;
         }
         play_sound(SOUND_MENU_CHANGE_SELECT, gDefaultSoundArgs);
     }
@@ -3145,7 +3193,7 @@ void update_camera(struct Camera *c) {
         sCButtonsPressed = find_c_buttons_pressed(sCButtonsPressed, gPlayer1Controller->buttonPressed,gPlayer1Controller->buttonDown);
     }
 
-    if (gMarioState->action == ACT_SHOT_FROM_CANNON && newcam_active)
+    if (gMarioState->action == ACT_SHOT_FROM_CANNON && newcam_active && !cameraControlsLocked)
     {
         gMarioState->area->camera->mode = CAM_MODE_NEWCAM;
         gLakituState.mode = CAM_MODE_NEWCAM;
@@ -3264,7 +3312,11 @@ void update_camera(struct Camera *c) {
         skip_camera_interpolation();
     }
     // Start any Mario-related cutscenes
-    start_cutscene(c, get_cutscene_from_mario_status(c));
+    u8 nextCutscene = get_cutscene_from_mario_status(c);
+    if (nextCutscene != 0 && (newcam_active || c->mode == CAM_MODE_NEWCAM || c->defMode == CAM_MODE_NEWCAM)) {
+        newcam_force_official_for_cutscene(c);
+    }
+    start_cutscene(c, nextCutscene);
     stub_camera_2(c);
     gCheckingSurfaceCollisionsForCamera = FALSE;
     if (gCurrLevelNum != LEVEL_CASTLE) {
@@ -3536,7 +3588,13 @@ void init_camera(struct Camera *c) {
     c->yaw = gLakituState.yaw;
     c->nextYaw = gLakituState.yaw;
 
-    if (newcam_active == 1)
+    if (newcam_is_bowser_battle_level()) {
+        newcam_active = 0;
+        c->mode = CAMERA_MODE_BOSS_FIGHT;
+        c->defMode = CAMERA_MODE_BOSS_FIGHT;
+        gLakituState.mode = CAMERA_MODE_BOSS_FIGHT;
+        gLakituState.defMode = CAMERA_MODE_BOSS_FIGHT;
+    } else if (newcam_active == 1)
     {
         gLakituState.mode = CAM_MODE_NEWCAM;
         gLakituState.defMode = CAM_MODE_NEWCAM;
@@ -5641,13 +5699,14 @@ void set_camera_mode_8_directions(struct Camera *c) {
  * set it to be so.
  */
 void set_camera_mode_boss_fight(struct Camera *c) {
+    if (newcam_active || c->mode == CAM_MODE_NEWCAM || c->defMode == CAM_MODE_NEWCAM) {
+        newcam_force_official_mode(c, CAMERA_MODE_BOSS_FIGHT, FALSE);
+    }
+
     if (c->mode != CAMERA_MODE_BOSS_FIGHT) {
         transition_to_camera_mode(c, CAMERA_MODE_BOSS_FIGHT, 15);
         sModeOffsetYaw = c->nextYaw - DEGREES(45);
     }
-
-    if (newcam_active == 1)
-        c->mode = CAM_MODE_NEWCAM;
 }
 
 void set_camera_mode_close_cam(u8 *mode) {
@@ -9340,12 +9399,8 @@ BAD_RETURN(s32) cutscene_exit_bowser_succ(struct Camera *c) {
 BAD_RETURN(s32) cutscene_non_painting_end(struct Camera *c) {
     c->cutscene = 0;
 
-    if (c->defMode == CAMERA_MODE_CLOSE) {
+    if (c->defMode == CAMERA_MODE_CLOSE || c->defMode == CAM_MODE_NEWCAM) {
         c->mode = CAMERA_MODE_CLOSE;
-    } else
-    if (c->defMode == CAM_MODE_NEWCAM) {
-        c->mode = CAM_MODE_NEWCAM;
-        newcam_reset_after_cutscene(c);
     }
     else
     {
@@ -10118,10 +10173,8 @@ BAD_RETURN(s32) cutscene_sliding_doors_open(struct Camera *c) {
  */
 BAD_RETURN(s32) cutscene_double_doors_end(struct Camera *c) {
     set_flag_post_door(c);
-    if (newcam_active == 1) {
-        c->mode = CAM_MODE_NEWCAM;
-        c->defMode = CAM_MODE_NEWCAM;
-        newcam_reset_after_cutscene(c);
+    if (newcam_active == 1 || c->defMode == CAM_MODE_NEWCAM) {
+        newcam_force_official_mode(c, CAMERA_MODE_CLOSE, FALSE);
     }
     c->cutscene = 0;
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
@@ -10306,10 +10359,9 @@ BAD_RETURN(s32) cutscene_unused_exit_focus_mario(struct Camera *c) {
  * Give control back to the player.
  */
 BAD_RETURN(s32) cutscene_exit_painting_end(struct Camera *c) {
-    if (newcam_active == 1)
-        c->mode = CAM_MODE_NEWCAM;
-    else
-        c->mode = CAMERA_MODE_CLOSE;
+    if (newcam_active == 1 || c->mode == CAM_MODE_NEWCAM || c->defMode == CAM_MODE_NEWCAM)
+        newcam_force_official_mode(c, CAMERA_MODE_CLOSE, FALSE);
+    c->mode = CAMERA_MODE_CLOSE;
     c->cutscene = 0;
     gCutsceneTimer = CUTSCENE_STOP;
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
@@ -10471,11 +10523,8 @@ BAD_RETURN(s32) cutscene_door_follow_mario(struct Camera *c) {
  * Ends the door cutscene. Sets the camera mode to close mode unless the default is free roam.
  */
 BAD_RETURN(s32) cutscene_door_end(struct Camera *c) {
-    if (c->defMode == CAMERA_MODE_CLOSE) {
+    if (c->defMode == CAMERA_MODE_CLOSE || c->defMode == CAM_MODE_NEWCAM) {
         c->mode = CAMERA_MODE_CLOSE;
-    } else
-    if (c->defMode == CAM_MODE_NEWCAM) {
-        c->mode = CAM_MODE_NEWCAM;
     }
     else
     {

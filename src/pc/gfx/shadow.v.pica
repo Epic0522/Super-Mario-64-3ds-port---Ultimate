@@ -1,0 +1,44 @@
+; Dynamic shadow overlay shader.
+;
+; Keep the same input layout as the normal 3DS shader so the main VBO stride
+; does not change:
+;   v0 = clip-space position
+;   v1 = shadow texture uv + compare depth
+;   v2 = color
+
+.fvec projection[4], modelView[4]
+
+.constf myconst(0.0, 1.0, -1.0, -0.5)
+.alias ones myconst.yyyy
+
+.in inpos v0
+.in intex v1
+.in inclr v2
+
+.out outpos position
+.out outtc0 texcoord0
+.out outclr color
+
+.proc main
+
+setup:
+    mov r0, inpos
+model:
+    dp4 r1.x, modelView[0], r0
+    dp4 r1.y, modelView[1], r0
+    dp4 r1.z, modelView[2], r0
+    dp4 r1.w, modelView[3], r0
+projection:
+    dp4 outpos.x, projection[0], r1
+    dp4 outpos.y, projection[1], r1
+    dp4 outpos.z, projection[2], r1
+    dp4 outpos.w, projection[3], r1
+texture:
+    mov r2, ones
+    mov r2.xyz, intex
+    mov outtc0, r2
+color:
+    mov outclr, ones
+
+    end
+.end
