@@ -34,6 +34,7 @@ static DVLB_s* sShadowShaderDvlb;
 static shaderProgram_s sShadowShaderProgram;
 static int uLoc_shadowProjection, uLoc_shadowModelView;
 static float* sVboBuffer;
+static float* sBottomVboBuffer;
 static float* sShadowReceiverVboBuffer;
 
 extern const u8 shader_shbin[];
@@ -114,6 +115,7 @@ static void applyBlend(void);
 static void gfx_citro3d_configure_normal_vertex_layout(void);
 static void gfx_citro3d_configure_shadow_receiver_vertex_layout(void);
 static void gfx_citro3d_apply_screen_modelview(void);
+static void gfx_citro3d_restore_normal_pipeline(void);
 
 // Data storage type for the screen clear buf configs
 union ScreenClearBufConfig3ds {
@@ -249,6 +251,19 @@ static void gfx_citro3d_configure_normal_vertex_layout(void)
     C3D_BufInfo* bufInfo = C3D_GetBufInfo();
     BufInfo_Init(bufInfo);
     BufInfo_Add(bufInfo, sVboBuffer, VERTEX_SHADER_SIZE * 4, 3, 0x210);
+}
+
+static void gfx_citro3d_configure_bottom_vertex_layout(void)
+{
+    C3D_AttrInfo* attrInfo = C3D_GetAttrInfo();
+    AttrInfo_Init(attrInfo);
+    AttrInfo_AddLoader(attrInfo, 0, GPU_FLOAT, 4); // v0=position
+    AttrInfo_AddLoader(attrInfo, 1, GPU_FLOAT, 2); // v1=texcoord
+    AttrInfo_AddLoader(attrInfo, 2, GPU_FLOAT, 4); // v2=color
+
+    C3D_BufInfo* bufInfo = C3D_GetBufInfo();
+    BufInfo_Init(bufInfo);
+    BufInfo_Add(bufInfo, sBottomVboBuffer, VERTEX_SHADER_SIZE * 4, 3, 0x210);
 }
 
 static void gfx_citro3d_configure_shadow_receiver_vertex_layout(void)
@@ -603,6 +618,19 @@ static void gfx_citro3d_set_sampler_parameters(int tile, bool linear_filter, uin
 
 static void update_depth()
 {
+    if (sDynamicShadowMaskMode != 0) {
+        /*
+         * Receiver collision triangles are coplanar with the visual floor.
+         * Comparing them against the already-drawn depth buffer makes their
+         * stencil coverage alternate with tiny rasterization differences.
+         * Connectivity and height filtering already reject unrelated floors;
+         * the projected shadow itself still uses the normal depth test.
+         */
+        C3D_DepthTest(false, GPU_ALWAYS, (GPU_WRITEMASK) 0);
+        C3D_DepthMap(true, -1.0f, 0);
+        return;
+    }
+
     C3D_DepthTest(sDepthTestOn, GPU_LEQUAL, sDepthUpdateOn ? GPU_WRITE_ALL : GPU_WRITE_COLOR);
     C3D_DepthMap(true, -1.0f, sDepthDecal ? -0.001f : 0);
 }
@@ -645,6 +673,8 @@ static void gfx_citro3d_apply_dynamic_shadow_stencil(void)
         C3D_StencilOp(GPU_STENCIL_KEEP, GPU_STENCIL_KEEP, GPU_STENCIL_REPLACE);
     } else if (sDynamicShadowStencil) {
         C3D_StencilTest(true, GPU_EQUAL, sDynamicShadowStencilRef, 0xFF, 0xFF);
+        // Consume an accepted receiver pixel once. This prevents overlapping
+        // model triangles from darkening it repeatedly.
         C3D_StencilOp(GPU_STENCIL_KEEP, GPU_STENCIL_KEEP, GPU_STENCIL_ZERO);
     } else if (sReceiverStencilTest) {
         C3D_StencilTest(true, GPU_EQUAL, DYNAMIC_SHADOW_RECEIVER_STENCIL, 0xFF, 0xFF);
@@ -683,13 +713,58 @@ static void gfx_citro3d_set_dynamic_shadow_mask(uint8_t mode)
         C3D_AlphaTest(false, GPU_ALWAYS, 0x00);
         C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ZERO, GPU_ONE,
                        GPU_ZERO, GPU_ONE);
-        C3D_DepthTest(true, GPU_LEQUAL, (GPU_WRITEMASK) 0);
+        C3D_DepthTest(false, GPU_ALWAYS, (GPU_WRITEMASK) 0);
     } else {
         C3D_AlphaTest(true, GPU_GREATER, 0x00);
         update_depth();
         applyBlend();
     }
     gfx_citro3d_apply_dynamic_shadow_stencil();
+}
+
+static void gfx_citro3d_restore_normal_pipeline(void)
+{
+    sDynamicShadowDepthPass = false;
+    sDynamicShadowReceiverPass = false;
+    sDynamicShadowStencil = false;
+    sReceiverStencil = false;
+    sReceiverStencilTest = false;
+    sDynamicShadowReceiver = false;
+    sDynamicShadowMaskMode = 0;
+    sDynamicShadowStencilRef = DYNAMIC_SHADOW_RECEIVER_STENCIL;
+
+    C3D_FragOpMode(GPU_FRAGOPMODE_GL);
+    C3D_BindProgram(&sShaderProgram);
+    gfx_citro3d_configure_normal_vertex_layout();
+    C3D_AlphaTest(true, GPU_GREATER, 0x00);
+    update_depth();
+    applyBlend();
+    gfx_citro3d_apply_dynamic_shadow_stencil();
+    update_shader(false);
+}
+
+static void gfx_citro3d_begin_bottom_screen_pass(void)
+{
+    gfx_citro3d_restore_normal_pipeline();
+    gfx_citro3d_configure_bottom_vertex_layout();
+
+    /*
+     * The bottom screen is redrawn every frame.  It must not inherit depth,
+     * stencil, scissor, or viewport state from the previous top-screen pass:
+     * title/credits 2D modes otherwise leave old fragments behind when the
+     * physical 3D slider is at zero.
+     */
+    C3D_RenderTargetClear(gTargetBottom, C3D_CLEAR_ALL, 0x000000FF,
+                          DYNAMIC_SHADOW_CLEAR_DEPTH_STENCIL);
+    C3D_FrameDrawOn(gTargetBottom);
+    C3D_SetViewport(0, 0, 240, 320);
+    C3D_SetScissor(GPU_SCISSOR_DISABLE, 0, 0, 0, 0);
+    C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_COLOR);
+    C3D_StencilTest(false, GPU_ALWAYS, 0, 0xFF, 0xFF);
+    C3D_StencilOp(GPU_STENCIL_KEEP, GPU_STENCIL_KEEP, GPU_STENCIL_KEEP);
+    C3D_AlphaTest(true, GPU_GREATER, 0x00);
+    C3D_FragOpMode(GPU_FRAGOPMODE_GL);
+    applyBlend();
 }
 
 static void gfx_citro3d_set_receiver_stencil(bool enabled)
@@ -844,10 +919,17 @@ static void gfx_citro3d_set_scissor(int x, int y, int width, int height)
 
 static void applyBlend()
 {
-    if (sUseBlend)
+    if (sDynamicShadowMaskMode != 0) {
+        // Receiver masks are stencil-only. Display-list material commands
+        // may toggle alpha blending while the mask is being drawn; never let
+        // those commands turn the collision mesh into visible gray geometry.
+        C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ZERO, GPU_ONE,
+                       GPU_ZERO, GPU_ONE);
+    } else if (sUseBlend) {
         C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
-    else
+    } else {
         C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
+    }
 }
 
 static void gfx_citro3d_set_use_alpha(bool use_alpha)
@@ -1129,6 +1211,9 @@ static void gfx_citro3d_init(void)
 
     // Create 1MB VBO (vertex buffer object)
     sVboBuffer = linearAlloc(1 * 1024 * 1024);
+    // Bottom-screen UI must not share the top-screen write cursor. Title,
+    // Goddard and credits frames can nearly fill the main VBO.
+    sBottomVboBuffer = linearAlloc(128 * 1024);
     sShadowReceiverVboBuffer = linearAlloc(1 * 1024 * 1024);
 
     // Configure buffers
@@ -1158,10 +1243,9 @@ static void gfx_citro3d_start_frame(void)
 
     sBufIdx = 0;
     scissor = false;
-    sDynamicShadowMaskMode = 0;
-    C3D_AlphaTest(true, GPU_GREATER, 0x00);
-    update_depth();
-    applyBlend();
+    s2DMode = 0;
+    sIsHud = false;
+    gfx_citro3d_restore_normal_pipeline();
     // reset viewport if video mode changed
     if (gGfx3DSMode != sCurrentGfx3DSMode)
     {
@@ -1174,18 +1258,6 @@ static void gfx_citro3d_start_frame(void)
     gfx_citro3d_set_viewport_clear_buffer(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_DEPTH);
 
     clear_buffers();
-    sDynamicShadowStencil = false;
-    sReceiverStencil = false;
-    sReceiverStencilTest = false;
-    sDynamicShadowReceiver = false;
-    gfx_citro3d_apply_dynamic_shadow_stencil();
-
-    // bottom screen
-    C3D_FrameDrawOn(gTargetBottom);
-    uint32_t tris = gfx_3ds_draw_minimap(sVboBuffer, sBufIdx);
-    if (gShowConfigMenu)
-        tris += gfx_3ds_menu_draw(sVboBuffer, sBufIdx + tris, true);
-    sBufIdx += tris;
 
     // Reset screen clear buffer flags
     screen_clear_bufs.struc.top = 
@@ -1208,11 +1280,20 @@ static void gfx_citro3d_on_resize(void)
 
 static void gfx_citro3d_end_frame(void)
 {
-    // set the texenv back
-    update_shader(false);
-    gfx_citro3d_set_dynamic_shadow_stencil(false);
-    gfx_citro3d_set_receiver_stencil(false);
-    gfx_citro3d_set_receiver_stencil_test(false);
+    /*
+     * Draw the bottom screen last.  Title, Goddard, transitions and credits
+     * all mutate the shared Citro3D pipeline in unusual ways; drawing the
+     * bottom screen at frame start let those later commands corrupt its
+     * texture/layout state in wide (3D-slider-zero) mode.
+     */
+    gfx_citro3d_begin_bottom_screen_pass();
+    uint32_t tris = gfx_3ds_draw_minimap(sBottomVboBuffer, 0);
+    if (gShowConfigMenu)
+        tris += gfx_3ds_menu_draw(sBottomVboBuffer, tris, true);
+
+    gfx_citro3d_restore_normal_pipeline();
+    s2DMode = 0;
+    sIsHud = false;
 
     C3D_FrameEnd(0); // Swap is handled automatically within this function
 }

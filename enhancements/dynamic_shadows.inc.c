@@ -24,6 +24,7 @@ u32 gDynamicShadowDebugRejectPlatform = 0;
 u32 gDynamicShadowDebugRejectBillboard = 0;
 u32 gDynamicShadowDebugRejectFar = 0;
 u32 gDynamicShadowDebugRejectLight = 0;
+u8 gDynamicShadowUnderwaterTint = FALSE;
 u8 gDynamicShadowCasterBoundsReady = FALSE;
 f32 gDynamicShadowCasterMinU = 1.0f;
 f32 gDynamicShadowCasterMaxU = 0.0f;
@@ -41,6 +42,8 @@ static const struct DynamicShadowLight sDynamicShadowLights[] = {
     { AREA_THI_HUGE,       0x2800, 0.60f, 0.35f, 84 },
     { AREA_THI_TINY,       0x2800, 0.60f, 0.35f, 84 },
     { AREA_CASTLE_GROUNDS, 0x2400, 0.52f, 0.35f, 72 },
+    { AREA_VCUTM,          0x2400, 0.58f, 0.35f, 82 },
+    { AREA_COTMC,          0x2000, 0.56f, 0.35f, 80 },
     { 0,                   0x2000, 0.56f, 0.35f, 80 },
 };
 

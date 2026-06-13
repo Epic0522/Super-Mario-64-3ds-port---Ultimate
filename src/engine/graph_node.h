@@ -127,6 +127,7 @@ struct DisplayListNode
     void *dynamicShadowMask;
     u16 dynamicShadowGroup;
     u8 dynamicShadow;
+    u8 dynamicShadowUnderwaterTint;
     struct DisplayListNode *next;
 };
 

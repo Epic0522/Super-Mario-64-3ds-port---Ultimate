@@ -43,6 +43,7 @@
 s16 rightstick[2];
 u8 camera_mode_button_pressed;
 u8 camera_recenter_button_pressed;
+u8 level_select_button_pressed;
 
 static int button_mapping[10][2];
 static u32 camera_control_keys_prev;
@@ -75,10 +76,17 @@ static u32 controller_3ds_get_held(void)
     u32 kHeld = keysHeld();
     u32 kDown = kHeld & ~(KEY_X | KEY_Y);
     u32 kPressed = kHeld & ~camera_control_keys_prev;
+    const u32 levelSelectCombo = KEY_SELECT | KEY_ZL | KEY_ZR;
+    bool levelSelectRequested = (kHeld & levelSelectCombo) == levelSelectCombo;
 
     camera_control_keys_prev = kHeld;
-    camera_mode_button_pressed |= (kPressed & KEY_X) != 0;
-    camera_recenter_button_pressed |= (kPressed & KEY_Y) != 0;
+    if (levelSelectRequested) {
+        level_select_button_pressed |= (kPressed & (KEY_ZL | KEY_ZR | KEY_SELECT)) != 0;
+        kDown &= ~(KEY_SELECT | KEY_ZL | KEY_ZR);
+    } else {
+        camera_mode_button_pressed |= (kPressed & KEY_X) != 0;
+        camera_recenter_button_pressed |= (kPressed & KEY_Y) != 0;
+    }
     for (size_t i = 0; i < sizeof(button_mapping) / sizeof(button_mapping[0]); i++)
     {
         if (button_mapping[i][0] & kDown) {

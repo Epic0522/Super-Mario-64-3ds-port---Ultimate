@@ -22,6 +22,8 @@
 #include "debug_course.h"
 #ifdef TARGET_N3DS
 #include "menu/level_select_menu.h"
+#include "print.h"
+#include "src/pc/controller/controller_3ds.h"
 #endif
 #ifdef VERSION_EU
 #include "memory.h"
@@ -56,6 +58,176 @@
 #define WARP_NODE_CREDITS_END 0xFA
 
 #define WARP_NODE_CREDITS_MIN 0xF8
+
+#ifdef TARGET_N3DS
+struct N3dsRuntimeLevelSelectEntry {
+    s16 level;
+    s8 area;
+    u8 node;
+    const char *name;
+};
+
+static const struct N3dsRuntimeLevelSelectEntry sN3dsRuntimeLevelSelectEntries[] = {
+    { LEVEL_CASTLE_GROUNDS, 1, 0x03, "CASTLE OUT" },
+    { LEVEL_CASTLE, 1, 0x01, "CASTLE IN" },
+    { LEVEL_BOB, 1, 0x0A, "BOB" },
+    { LEVEL_WF, 1, 0x0A, "WF" },
+    { LEVEL_JRB, 1, 0x0A, "JRB" },
+    { LEVEL_CCM, 1, 0x0A, "CCM" },
+    { LEVEL_BBH, 1, 0x0A, "BBH" },
+    { LEVEL_HMC, 1, 0x0A, "HMC" },
+    { LEVEL_LLL, 1, 0x0A, "LLL" },
+    { LEVEL_SSL, 1, 0x0A, "SSL" },
+    { LEVEL_DDD, 1, 0x0A, "DDD" },
+    { LEVEL_SL, 1, 0x0A, "SL" },
+    { LEVEL_WDW, 1, 0x0A, "WDW" },
+    { LEVEL_TTM, 1, 0x0A, "TTM" },
+    { LEVEL_THI, 1, 0x0A, "THI" },
+    { LEVEL_TTC, 1, 0x0A, "TTC" },
+    { LEVEL_RR, 1, 0x0A, "RR" },
+    { LEVEL_CASTLE_COURTYARD, 1, 0x0A, "COURTYARD" },
+    { LEVEL_PSS, 1, 0x0A, "PSS" },
+    { LEVEL_COTMC, 1, 0x0A, "COTMC" },
+    { LEVEL_TOTWC, 1, 0x0A, "TOTWC" },
+    { LEVEL_VCUTM, 1, 0x0A, "VCUTM" },
+    { LEVEL_SA, 1, 0x0A, "AQUARIUM" },
+    { LEVEL_WMOTR, 1, 0x0A, "WMOTR" },
+    { LEVEL_BITDW, 1, 0x0A, "BITDW" },
+    { LEVEL_BITFS, 1, 0x0A, "BITFS" },
+    { LEVEL_BITS, 1, 0x0A, "BITS" },
+    { LEVEL_BOWSER_1, 1, 0x0A, "BOWSER 1" },
+    { LEVEL_BOWSER_2, 1, 0x0A, "BOWSER 2" },
+    { LEVEL_BOWSER_3, 1, 0x0A, "BOWSER 3" },
+};
+
+#define N3DS_RUNTIME_LEVEL_SELECT_COUNT \
+    (sizeof(sN3dsRuntimeLevelSelectEntries) / sizeof(sN3dsRuntimeLevelSelectEntries[0]))
+
+static s16 sN3dsRuntimeLevelSelectActive = FALSE;
+static s16 sN3dsRuntimeLevelSelectIndex = 0;
+static s8 sN3dsRuntimeLevelSelectRepeatTimer = 0;
+static s8 sN3dsRuntimeLevelSelectStickLatch = FALSE;
+
+void set_play_mode(s16 playMode);
+void fade_into_special_warp(u32 arg, u32 color);
+void initiate_warp(s16 destLevel, s16 destArea, s16 destWarpNode, s32 arg3);
+
+static s16 n3ds_runtime_level_select_find_index(s16 level) {
+    s16 i;
+
+    for (i = 0; i < (s16) N3DS_RUNTIME_LEVEL_SELECT_COUNT; i++) {
+        if (sN3dsRuntimeLevelSelectEntries[i].level == level) {
+            return i;
+        }
+    }
+
+    return 0;
+}
+
+static void n3ds_runtime_level_select_move(s16 step) {
+    s32 next = sN3dsRuntimeLevelSelectIndex + step;
+
+    if (next < 0) {
+        next = 0;
+    }
+    if (next >= (s16) N3DS_RUNTIME_LEVEL_SELECT_COUNT) {
+        next = (s16) N3DS_RUNTIME_LEVEL_SELECT_COUNT - 1;
+    }
+    sN3dsRuntimeLevelSelectIndex = next;
+}
+
+static void n3ds_runtime_level_select_consume_input(void) {
+    gPlayer1Controller->buttonPressed = 0;
+    gPlayer1Controller->buttonDown = 0;
+    gPlayer2Controller->buttonPressed = 0;
+    gPlayer2Controller->buttonDown = 0;
+    gPlayer3Controller->buttonPressed = 0;
+    gPlayer3Controller->buttonDown = 0;
+}
+
+static s32 n3ds_runtime_level_select_update(void) {
+    s16 stickStep = 0;
+    const struct N3dsRuntimeLevelSelectEntry *entry;
+
+    if (sN3dsRuntimeLevelSelectRepeatTimer > 0) {
+        sN3dsRuntimeLevelSelectRepeatTimer--;
+    }
+
+    if (!sN3dsRuntimeLevelSelectActive) {
+        return FALSE;
+    }
+
+    if (gPlayer1Controller->buttonPressed & (B_BUTTON | START_BUTTON)) {
+        sN3dsRuntimeLevelSelectActive = FALSE;
+        sN3dsRuntimeLevelSelectRepeatTimer = 0;
+        sN3dsRuntimeLevelSelectStickLatch = FALSE;
+        play_sound(SOUND_MENU_CLICK_FILE_SELECT, gDefaultSoundArgs);
+        return TRUE;
+    }
+
+    if (gPlayer1Controller->buttonPressed & (A_BUTTON | Z_TRIG)) {
+        entry = &sN3dsRuntimeLevelSelectEntries[sN3dsRuntimeLevelSelectIndex];
+        sN3dsRuntimeLevelSelectActive = FALSE;
+        sN3dsRuntimeLevelSelectRepeatTimer = 0;
+        sN3dsRuntimeLevelSelectStickLatch = FALSE;
+        if (entry->level == gCurrLevelNum) {
+            play_sound(SOUND_MENU_CLICK_FILE_SELECT, gDefaultSoundArgs);
+            return TRUE;
+        }
+        gCurrSaveFileNum = 4;
+        gCurrActNum = 6;
+        gSavedCourseNum = COURSE_NONE;
+        play_sound(SOUND_MENU_STAR_SOUND, gDefaultSoundArgs);
+        initiate_warp(entry->level, entry->area, entry->node, 0);
+        set_play_mode(PLAY_MODE_CHANGE_LEVEL);
+        return TRUE;
+    }
+
+    if (gPlayer1Controller->rawStickY > 45) {
+        stickStep = -1;
+    } else if (gPlayer1Controller->rawStickY < -45) {
+        stickStep = 1;
+    } else if (gPlayer1Controller->rawStickX < -45) {
+        stickStep = -10;
+    } else if (gPlayer1Controller->rawStickX > 45) {
+        stickStep = 10;
+    } else {
+        sN3dsRuntimeLevelSelectRepeatTimer = 0;
+        sN3dsRuntimeLevelSelectStickLatch = FALSE;
+    }
+
+    if (stickStep != 0 && !sN3dsRuntimeLevelSelectStickLatch
+        && sN3dsRuntimeLevelSelectRepeatTimer == 0) {
+        n3ds_runtime_level_select_move(stickStep);
+        sN3dsRuntimeLevelSelectStickLatch = TRUE;
+        sN3dsRuntimeLevelSelectRepeatTimer = 4;
+    }
+
+    if (gPlayer1Controller->buttonPressed & U_JPAD) {
+        n3ds_runtime_level_select_move(-1);
+        sN3dsRuntimeLevelSelectRepeatTimer = 8;
+    }
+    if (gPlayer1Controller->buttonPressed & D_JPAD) {
+        n3ds_runtime_level_select_move(1);
+        sN3dsRuntimeLevelSelectRepeatTimer = 8;
+    }
+    if (gPlayer1Controller->buttonPressed & L_JPAD) {
+        n3ds_runtime_level_select_move(-10);
+        sN3dsRuntimeLevelSelectRepeatTimer = 8;
+    }
+    if (gPlayer1Controller->buttonPressed & R_JPAD) {
+        n3ds_runtime_level_select_move(10);
+        sN3dsRuntimeLevelSelectRepeatTimer = 8;
+    }
+
+    entry = &sN3dsRuntimeLevelSelectEntries[sN3dsRuntimeLevelSelectIndex];
+    // Keep the runtime selector on numeric HUD text only. The normal menu string
+    // path can collide with pause/dialog rendering on 3DS when opened in-level.
+    print_text_fmt_int(42, 92, "%2d", sN3dsRuntimeLevelSelectIndex + 1);
+    print_text(92, 92, entry->name);
+    return TRUE;
+}
+#endif
 
 #ifdef VERSION_JP
 const char *credits01[] = { "1GAME DIRECTOR", "SHIGERU MIYAMOTO" };
@@ -963,6 +1135,22 @@ void basic_update(UNUSED s16 *arg) {
 }
 
 s32 play_mode_normal(void) {
+#ifdef TARGET_N3DS
+    if (level_select_button_pressed) {
+        level_select_button_pressed = FALSE;
+        sN3dsRuntimeLevelSelectIndex = n3ds_runtime_level_select_find_index(gCurrLevelNum);
+        sN3dsRuntimeLevelSelectActive = TRUE;
+        sN3dsRuntimeLevelSelectRepeatTimer = 0;
+        sN3dsRuntimeLevelSelectStickLatch = TRUE;
+        n3ds_runtime_level_select_consume_input();
+        play_sound(SOUND_MENU_CLICK_FILE_SELECT, gDefaultSoundArgs);
+        return 0;
+    }
+    if (n3ds_runtime_level_select_update()) {
+        return 0;
+    }
+#endif
+
     if (gCurrDemoInput != NULL) {
         print_intro_text();
         if (gPlayer1Controller->buttonPressed & END_DEMO) {

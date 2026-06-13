@@ -18,6 +18,10 @@
 #define DYNAMIC_SHADOW_GFX_MASK_DISABLE (DYNAMIC_SHADOW_GFX_MASK_MAGIC | 0u)
 #define DYNAMIC_SHADOW_GFX_MASK_WRITE(stencilRef) \
     (DYNAMIC_SHADOW_GFX_MASK_MAGIC | ((stencilRef) & 0xFFu))
+#define DYNAMIC_SHADOW_GFX_TINT_MAGIC 0x44535400u
+#define DYNAMIC_SHADOW_GFX_TINT_NORMAL (DYNAMIC_SHADOW_GFX_TINT_MAGIC | 0u)
+#define DYNAMIC_SHADOW_GFX_TINT_UNDERWATER_ABOVE_CAMERA (DYNAMIC_SHADOW_GFX_TINT_MAGIC | 1u)
+#define DYNAMIC_SHADOW_GFX_TINT_UNDERWATER_BELOW_CAMERA (DYNAMIC_SHADOW_GFX_TINT_MAGIC | 2u)
 // Safety fuse only. Real dynamic-shadow selection is distance/visibility based,
 // so this should not decide which visible objects get shadows.
 #define DYNAMIC_SHADOW_MAX_APPENDED_LISTS 128
@@ -48,6 +52,7 @@ extern u32 gDynamicShadowDebugRejectPlatform;
 extern u32 gDynamicShadowDebugRejectBillboard;
 extern u32 gDynamicShadowDebugRejectFar;
 extern u32 gDynamicShadowDebugRejectLight;
+extern u8 gDynamicShadowUnderwaterTint;
 extern u8 gDynamicShadowCasterBoundsReady;
 extern f32 gDynamicShadowCasterMinU;
 extern f32 gDynamicShadowCasterMaxU;

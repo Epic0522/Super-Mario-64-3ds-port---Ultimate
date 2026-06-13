@@ -92,6 +92,10 @@ TRACKS = {
     "music_lakitu.png": "Lakitu",
 }
 
+TRACK_CANVAS_WIDTHS = {
+    "music_victory.png": 128,
+}
+
 
 def dialog_index(ch):
     if "0" <= ch <= "9":
@@ -159,10 +163,11 @@ def draw_sprite_with_shadow(out, sprite, pos):
     out.alpha_composite(sprite, pos)
 
 
-def render_track(path, title, note):
+def render_track(path, title, note, canvas_width=None):
     old = Image.open(path).convert("RGBA")
-    canvas_w, canvas_h = old.size
-    out = Image.new("RGBA", old.size, (255, 255, 255, 0))
+    canvas_w = canvas_width if canvas_width is not None else old.width
+    canvas_h = old.height
+    out = Image.new("RGBA", (canvas_w, canvas_h), (255, 255, 255, 0))
 
     note_gap = 0
     right_pad = 4
@@ -206,13 +211,11 @@ def render_track(path, title, note):
 
     bbox = out.getchannel("A").getbbox()
     if bbox is not None and bbox[2] > canvas_w - right_pad:
-        shifted = Image.new("RGBA", old.size, (255, 255, 255, 0))
+        shifted = Image.new("RGBA", (canvas_w, canvas_h), (255, 255, 255, 0))
         shifted.alpha_composite(out, (canvas_w - right_pad - bbox[2], 0))
         out = shifted
 
     out.save(path)
-    if out.size != (canvas_w, canvas_h):
-        raise RuntimeError(f"{path} changed size")
 
 
 def main():
@@ -220,7 +223,7 @@ def main():
     for filename, title in TRACKS.items():
         path = TEXTURE_DIR / filename
         if path.exists():
-            render_track(path, title, note)
+            render_track(path, title, note, TRACK_CANVAS_WIDTHS.get(filename))
 
 
 if __name__ == "__main__":

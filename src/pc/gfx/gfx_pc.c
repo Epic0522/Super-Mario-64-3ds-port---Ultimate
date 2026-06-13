@@ -240,7 +240,15 @@ static bool gfx_dynamic_shadow_receiver_tri_in_range(struct LoadedVertex *v_arr[
     return true;
 }
 
-#define DYNAMIC_SHADOW_MODEL_ALPHA 140
+#define DYNAMIC_SHADOW_MODEL_ALPHA 168
+#define DYNAMIC_SHADOW_UNDERWATER_ABOVE_ALPHA 88
+#define DYNAMIC_SHADOW_UNDERWATER_ABOVE_RED 18
+#define DYNAMIC_SHADOW_UNDERWATER_ABOVE_GREEN 58
+#define DYNAMIC_SHADOW_UNDERWATER_ABOVE_BLUE 102
+#define DYNAMIC_SHADOW_UNDERWATER_BELOW_ALPHA 132
+#define DYNAMIC_SHADOW_UNDERWATER_BELOW_RED 10
+#define DYNAMIC_SHADOW_UNDERWATER_BELOW_GREEN 34
+#define DYNAMIC_SHADOW_UNDERWATER_BELOW_BLUE 78
 
 static bool n64_native_res;
 static bool dynamic_shadow_material;
@@ -248,6 +256,15 @@ static bool dynamic_shadow_receiver_marking_enabled = true;
 static uint8_t dynamic_shadow_receiver_mask_mode;
 static uint32_t dynamic_shadow_pass = DYNAMIC_SHADOW_GFX_PASS_NORMAL;
 static float dynamic_shadow_saved_projection[4][4];
+
+static void gfx_set_dynamic_shadow_underwater_tint(u8 mode) {
+    if (gDynamicShadowUnderwaterTint == mode) {
+        return;
+    }
+
+    gfx_flush();
+    gDynamicShadowUnderwaterTint = mode;
+}
 
 static void gfx_set_dynamic_shadow_material(bool enabled) {
     if (dynamic_shadow_material != enabled) {
@@ -938,10 +955,22 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
 
 #ifdef TARGET_N3DS
         if (dynamic_shadow_material) {
-            d->color.r = 0;
-            d->color.g = 0;
-            d->color.b = 0;
-            d->color.a = DYNAMIC_SHADOW_MODEL_ALPHA;
+            if (gDynamicShadowUnderwaterTint == 1) {
+                d->color.r = DYNAMIC_SHADOW_UNDERWATER_ABOVE_RED;
+                d->color.g = DYNAMIC_SHADOW_UNDERWATER_ABOVE_GREEN;
+                d->color.b = DYNAMIC_SHADOW_UNDERWATER_ABOVE_BLUE;
+                d->color.a = DYNAMIC_SHADOW_UNDERWATER_ABOVE_ALPHA;
+            } else if (gDynamicShadowUnderwaterTint == 2) {
+                d->color.r = DYNAMIC_SHADOW_UNDERWATER_BELOW_RED;
+                d->color.g = DYNAMIC_SHADOW_UNDERWATER_BELOW_GREEN;
+                d->color.b = DYNAMIC_SHADOW_UNDERWATER_BELOW_BLUE;
+                d->color.a = DYNAMIC_SHADOW_UNDERWATER_BELOW_ALPHA;
+            } else {
+                d->color.r = 0;
+                d->color.g = 0;
+                d->color.b = 0;
+                d->color.a = DYNAMIC_SHADOW_MODEL_ALPHA;
+            }
         }
 #endif
     }
@@ -1931,6 +1960,8 @@ static void gfx_run_dl(Gfx* cmd) {
                     gfx_set_dynamic_shadow_receiver_marking((cmd->words.w1 & 1u) != 0);
                 } else if ((cmd->words.w1 & 0xFFFFFF00u) == DYNAMIC_SHADOW_GFX_MASK_MAGIC) {
                     gfx_set_dynamic_shadow_receiver_mask(cmd->words.w1 & 0xFFu);
+                } else if ((cmd->words.w1 & 0xFFFFFF00u) == DYNAMIC_SHADOW_GFX_TINT_MAGIC) {
+                    gfx_set_dynamic_shadow_underwater_tint(cmd->words.w1 & 0xFFu);
                 } else {
                     gfx_flush();
                 }
@@ -2038,6 +2069,19 @@ void gfx_run(Gfx *commands) {
 
     profiler_3ds_log_time(0);
     gfx_rapi->start_frame();
+#ifdef TARGET_N3DS
+    /*
+     * The Citro3D backend rebuilds its pipeline at frame start. Keep the
+     * command interpreter's shadow-state cache in the same known state so
+     * title, credits and transition frames cannot make later commands skip a
+     * required state change.
+     */
+    dynamic_shadow_material = false;
+    dynamic_shadow_receiver_marking_enabled = true;
+    dynamic_shadow_receiver_mask_mode = 0;
+    dynamic_shadow_pass = DYNAMIC_SHADOW_GFX_PASS_NORMAL;
+    rendering_state.dynamic_shadow_receiver = false;
+#endif
     profiler_3ds_log_time(4); // GFX RAPI Start Frame
 
     // profiler_3ds_log_time(0);

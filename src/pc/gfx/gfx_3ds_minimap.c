@@ -558,7 +558,7 @@ void gfx_3ds_init_minimap()
     gfx_3ds_minimap_load_hud_texture(&music_title_tex[SEQ_EVENT_CUTSCENE_LAKITU], music_lakitu_t3x, music_lakitu_t3x_size);
 
     music_title_width[SEQ_SOUND_PLAYER] = 64;
-    music_title_width[SEQ_EVENT_CUTSCENE_COLLECT_STAR] = 256;
+    music_title_width[SEQ_EVENT_CUTSCENE_COLLECT_STAR] = 128;
     music_title_width[SEQ_MENU_TITLE_SCREEN] = 128;
     music_title_width[SEQ_LEVEL_GRASS] = 256;
     music_title_width[SEQ_LEVEL_INSIDE_CASTLE] = 256;
@@ -588,6 +588,7 @@ void gfx_3ds_init_minimap()
     music_title_width[SEQ_EVENT_TOAD_MESSAGE] = 128;
     music_title_width[SEQ_EVENT_PEACH_MESSAGE] = 128;
     music_title_width[SEQ_EVENT_CUTSCENE_INTRO] = 64;
+    music_title_width[SEQ_EVENT_CUTSCENE_VICTORY] = 128;
     music_title_width[SEQ_EVENT_CUTSCENE_ENDING] = 128;
     music_title_width[SEQ_MENU_FILE_SELECT] = 128;
     music_title_width[SEQ_EVENT_CUTSCENE_LAKITU] = 64;
