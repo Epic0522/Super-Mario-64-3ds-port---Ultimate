@@ -924,7 +924,7 @@ $(BUILD_DIR)/src/pc/gfx/shadow.shbin.o : src/pc/gfx/shadow.v.pica
 
 SMDH_TITLE ?= Super Mario 64
 SMDH_DESCRIPTION ?= Super Mario 64 3DS Port
-SMDH_AUTHOR ?= mkst
+SMDH_AUTHOR ?= SM64 Port Team
 SMDH_ICON := 3ds/icon.smdh
 
 $(ELF): $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(BUILD_DIR)/src/pc/gfx/shader.shbin.o $(BUILD_DIR)/src/pc/gfx/shadow.shbin.o $(MINIMAP_O) $(SMDH_ICON)

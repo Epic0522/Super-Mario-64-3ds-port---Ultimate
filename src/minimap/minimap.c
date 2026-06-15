@@ -20,19 +20,55 @@ static s16 current_level = -1;
 static s16 current_area = -1;
 static s16 current_play_mode = -1;
 
+static bool level_select_preview_active = false;
+static s16 level_select_preview_level = -1;
+static s8 level_select_preview_area = 1;
+
+static s16 minimap_get_effective_level(void)
+{
+    return level_select_preview_active ? level_select_preview_level : gCurrLevelNum;
+}
+
+static s16 minimap_get_effective_area(void)
+{
+    return level_select_preview_active ? level_select_preview_area : gCurrAreaIndex;
+}
+
+static s16 minimap_get_effective_play_mode(void)
+{
+    return level_select_preview_active ? 0 : sCurrPlayMode;
+}
+
+void minimap_set_level_select_preview(bool active, s16 level, s8 area)
+{
+    level_select_preview_active = active;
+    level_select_preview_level = level;
+    level_select_preview_area = area > 0 ? area : 1;
+}
+
+bool minimap_is_level_select_preview_active(void)
+{
+    return level_select_preview_active;
+}
+
 bool minimap_has_level_or_area_changed()
 {
-    return (current_level != gCurrLevelNum || current_area != gCurrAreaIndex || current_play_mode != sCurrPlayMode);
+    return (current_level != minimap_get_effective_level()
+            || current_area != minimap_get_effective_area()
+            || current_play_mode != minimap_get_effective_play_mode());
 }
 
 bool minimap_load_level_and_area()
 {
     bool has_minimap_level = true;
+    s16 effective_level = minimap_get_effective_level();
+    s16 effective_area = minimap_get_effective_area();
+    s16 effective_play_mode = minimap_get_effective_play_mode();
 
     // gCurrAreaIndex is 1-indexed
-    area_index = gCurrAreaIndex > 0 ? gCurrAreaIndex - 1 : 0;
+    area_index = effective_area > 0 ? effective_area - 1 : 0;
 
-    switch (gCurrLevelNum)
+    switch (effective_level)
     {
         case LEVEL_BBH:
             level_index = 1;
@@ -140,15 +176,15 @@ bool minimap_load_level_and_area()
             has_minimap_level = false;
     }
 
-    current_level = gCurrLevelNum;
-    current_area = gCurrAreaIndex;
-    current_play_mode = sCurrPlayMode;
+    current_level = effective_level;
+    current_area = effective_area;
+    current_play_mode = effective_play_mode;
 
     if (!has_minimap_level)
         return false;
 
     // if not play or pause modes, then dont display minimap
-    if (sCurrPlayMode != 0 && sCurrPlayMode != 2)
+    if (effective_play_mode != 0 && effective_play_mode != 2)
         return false;
 
     if (area_index >= level_info[level_index].area_count)

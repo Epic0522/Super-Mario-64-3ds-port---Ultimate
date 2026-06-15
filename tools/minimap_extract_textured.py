@@ -438,7 +438,7 @@ def convex_hull(points: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return lower[:-1] + upper[:-1]
 
 
-def parse_movtex_regions(root: Path, level: str, area: str) -> list[MovtexRegion]:
+def parse_movtex_regions(root: Path, level: str, area: str, include_water: bool = False) -> list[MovtexRegion]:
     movtex_path = root / "levels" / level / "areas" / area / "movtext.inc.c"
     if not movtex_path.exists():
         return []
@@ -453,6 +453,9 @@ def parse_movtex_regions(root: Path, level: str, area: str) -> list[MovtexRegion
         lower_name = name.lower()
         if "mist" in lower_name:
             continue
+        is_water = "water" in lower_name and "sand" not in lower_name
+        if is_water and not include_water:
+            continue
         if not any(tag in lower_name for tag in ("quicksand", "sand", "water")):
             continue
         texture = movtex_texture_name(name)
@@ -462,7 +465,7 @@ def parse_movtex_regions(root: Path, level: str, area: str) -> list[MovtexRegion
             for box_match in re.finditer(r"MOV_TEX_4_BOX_TRIS\s*\(\s*([^,]+),\s*([^)]+)\)", body)
         ]
         if len(box_points) >= 4:
-            color = (81, 138, 204, 170) if "water" in lower_name and "sand" not in lower_name else (204, 160, 73, 185)
+            color = (81, 138, 204, 170) if is_water else (204, 160, 73, 185)
             regions.append(MovtexRegion(name, tuple(box_points), color, texture, match_water_box_height(box_points, water_boxes)))
             continue
 
@@ -797,14 +800,39 @@ def projected_area_xz(triangle: Triangle) -> float:
 
 
 def should_skip_for_topdown(level: str, triangle: Triangle) -> bool:
+    area = projected_area_xz(triangle)
+    y = triangle.avg_y
+    ny = triangle.normal_y
     if level == "vcutm":
-        # Vanish Cap's map has a high opaque shell. A gameplay minimap needs the
-        # interior floor layout, so drop the broad ceiling faces before z-buffering.
-        return (
-            triangle.avg_y > 6000.0
-            and abs(triangle.normal_y) > 0.95
-            and projected_area_xz(triangle) > 500000.0
-        )
+        return y > 6000.0 and abs(ny) > 0.95 and area > 500000.0
+    if level == "jrb":
+        return ny < -0.90 and area > 1000000.0
+    if level == "cotmc":
+        return ny < -0.70
+    if level == "ssl":
+        # Pyramid interior: remove upward-facing pyramid slopes at Y>700
+        return y > 700.0 and ny > 0.3 and area > 100000.0
+    if level == "wdw":
+        # WDW town: remove overhead platforms/roofs at Y>3500
+        return y > 3500.0 and abs(ny) > 0.3 and area > 100000.0
+    if level == "ttc":
+        # Tick Tock Clock: remove ceiling at Y>7500
+        return y > 7500.0 and ny < -0.3 and area > 100000.0
+    if level == "bbh":
+        # Big Boo's Haunt: remove mansion roof/ceiling at Y>3000
+        return y > 3000.0 and area > 200000.0
+    if level == "hmc":
+        # Hazy Maze Cave: remove cave ceiling/roof at Y>2700
+        return y > 2700.0 and abs(ny) > 0.3 and area > 200000.0
+    if level == "pss":
+        # Princess's Secret Slide: remove slide ceiling at Y>5500
+        return y > 5500.0 and abs(ny) > 0.3 and area > 200000.0
+    if level == "sl":
+        # Snowman's Land: remove snowman/igloo roof at Y>4500
+        return y > 4500.0 and ny > 0.3 and area > 200000.0
+    if level == "totwc":
+        # Tower of the Wing Cap: remove ceiling at Y>2000
+        return y > 2000.0 and ny < -0.3 and area > 200000.0
     return False
 
 
@@ -906,8 +934,6 @@ def draw_flat_polygon(
             if depth is not None and region.avg_y is not None:
                 depth[index] = max(depth[index], region.avg_y)
             drew = True
-    if drew:
-        ImageDraw.Draw(image, "RGBA").line([*pts, pts[0]], fill=(92, 72, 35, 170), width=1)
 
 
 def draw_map_markers(image: Image.Image, markers: list[MapMarker]) -> None:
@@ -973,8 +999,6 @@ def draw_textured_polygon(
             if depth is not None and region.avg_y is not None:
                 depth[index] = max(depth[index], region.avg_y)
             drew = True
-    if drew:
-        ImageDraw.Draw(image, "RGBA").line([*pts, pts[0]], fill=(92, 72, 35, 170), width=1)
 
 
 def downsample_depth(zbuf: list[float], render_size: int, size: int, scale: int) -> list[float]:
@@ -1082,6 +1106,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--include-special-objects", action="store_true", help="compose level geometry listed in collision special objects")
     parser.add_argument("--include-dynamic-objects", action="store_true", help="include broader platform/bridge/door object heuristics")
     parser.add_argument("--include-movtex", action="store_true", help="overlay moving texture regions such as water and quicksand")
+    parser.add_argument("--include-water-movtex", action="store_true", help="also overlay movtex water surfaces; compose-map skips them by default")
     return parser
 
 
@@ -1128,7 +1153,7 @@ def render_level_area(args: argparse.Namespace, root: Path, level: str, area: st
     )
     movtex_regions = []
     if args.include_movtex:
-        movtex_regions.extend(parse_movtex_regions(root, level, area))
+        movtex_regions.extend(parse_movtex_regions(root, level, area, args.include_water_movtex))
         movtex_regions.extend(parse_special_movtex_regions(root, level, area))
     draw_movtex_regions(image, movtex_regions, texture_paths, bounds, depth)
     if args.grid:

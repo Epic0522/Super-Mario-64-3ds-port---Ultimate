@@ -599,6 +599,7 @@ bool show_minimap = false;
 uint32_t gfx_3ds_draw_minimap(float *vertex_buffer, int vertex_offset)
 {
     bool drew_minimap = false;
+    bool preview_minimap;
 
     buffer_offset = vertex_offset;
 
@@ -616,7 +617,15 @@ uint32_t gfx_3ds_draw_minimap(float *vertex_buffer, int vertex_offset)
             minimap_unload_current_minimap_texture();
     }
 
-    if (show_minimap && minimap_tex_loaded && minimap_get_mario_position(&mario_x, &mario_y, &mario_direction))
+    preview_minimap = minimap_is_level_select_preview_active();
+
+    if (show_minimap && minimap_tex_loaded && preview_minimap)
+    {
+        gfx_3ds_minimap_draw_background_color(vertex_buffer);
+        gfx_3ds_minimap_draw_background(vertex_buffer);
+        drew_minimap = true;
+    }
+    else if (show_minimap && minimap_tex_loaded && minimap_get_mario_position(&mario_x, &mario_y, &mario_direction))
     {
         gfx_3ds_minimap_draw_background_color(vertex_buffer);
         gfx_3ds_minimap_draw_background(vertex_buffer);
@@ -629,7 +638,8 @@ uint32_t gfx_3ds_draw_minimap(float *vertex_buffer, int vertex_offset)
     if (!drew_minimap)
         gfx_3ds_minimap_draw_background_color_rgb(vertex_buffer, 0x000000);
 
-    gfx_3ds_minimap_draw_music_title(vertex_buffer);
+    if (!preview_minimap)
+        gfx_3ds_minimap_draw_music_title(vertex_buffer);
     return buffer_offset - vertex_offset;
 }
 
