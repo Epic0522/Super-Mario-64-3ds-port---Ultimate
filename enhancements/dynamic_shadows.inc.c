@@ -5,6 +5,11 @@
 #include "enhancements/dynamic_shadows.h"
 
 static u8 sDynamicShadowRenderingMode = FALSE;
+static struct DynamicShadowLight sDynamicShadowResolvedLight;
+static s16 sDynamicShadowLightSeedLevel = LEVEL_NONE;
+static s16 sDynamicShadowLightSeedArea = -1;
+static s16 sDynamicShadowLightYawOffset = 0;
+static f32 sDynamicShadowLightLengthScale = 1.0f;
 
 Mat4 gDynamicShadowCameraInvMtx;
 Mat4 gDynamicShadowLightVpMtx;
@@ -54,13 +59,38 @@ u8 dynamic_shadows_should_render(void) {
 const struct DynamicShadowLight *dynamic_shadows_get_light(void) {
     s16 area = LEVEL_AREA_INDEX(gCurrLevelNum, gCurrAreaIndex);
     const struct DynamicShadowLight *fallback = &sDynamicShadowLights[sizeof(sDynamicShadowLights) / sizeof(sDynamicShadowLights[0]) - 1];
+    const struct DynamicShadowLight *baseLight = fallback;
 
     for (u32 i = 0; i < sizeof(sDynamicShadowLights) / sizeof(sDynamicShadowLights[0]); i++) {
         if (sDynamicShadowLights[i].area == area) {
-            return &sDynamicShadowLights[i];
+            baseLight = &sDynamicShadowLights[i];
+            break;
         }
     }
-    return fallback;
+
+    if (sDynamicShadowLightSeedLevel != gCurrLevelNum
+        || sDynamicShadowLightSeedArea != gCurrAreaIndex) {
+        s16 majorYawOffset;
+        s16 minorYawOffset;
+
+        sDynamicShadowLightSeedLevel = gCurrLevelNum;
+        sDynamicShadowLightSeedArea = gCurrAreaIndex;
+        majorYawOffset = (random_u16() & 0x0003) * 0x4000;
+        minorYawOffset = (random_u16() & 0x0FFF) - 0x0800;
+        sDynamicShadowLightYawOffset = majorYawOffset + minorYawOffset;
+        sDynamicShadowLightLengthScale = 0.78f + ((random_u16() & 0x00FF) / 255.0f) * 0.62f;
+    }
+
+    sDynamicShadowResolvedLight = *baseLight;
+    sDynamicShadowResolvedLight.yaw += sDynamicShadowLightYawOffset;
+    sDynamicShadowResolvedLight.length *= sDynamicShadowLightLengthScale;
+    if (sDynamicShadowResolvedLight.length < 0.35f) {
+        sDynamicShadowResolvedLight.length = 0.35f;
+    }
+    if (sDynamicShadowResolvedLight.length > 1.05f) {
+        sDynamicShadowResolvedLight.length = 1.05f;
+    }
+    return &sDynamicShadowResolvedLight;
 }
 
 void dynamic_shadows_set_rendering_mode(u8 enabled) {
