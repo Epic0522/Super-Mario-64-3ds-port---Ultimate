@@ -24,6 +24,7 @@
 #include "segment2.h"
 
 #ifdef TARGET_N3DS
+#include "actors/common0.h"
 #include "src/pc/gfx/gfx_citro3d.h"
 #include "src/pc/gfx/color_conversion.h"
 #include "enhancements/dynamic_shadows.h"
@@ -159,6 +160,7 @@ static u8 sSuppressDynamicShadowReceiver = FALSE;
 static u8 dynamic_shadow_allows_billboard_caster(void);
 static u8 dynamic_shadow_allows_billboard_component_caster(void);
 static u8 dynamic_shadow_is_mario_object(void);
+static u8 dynamic_shadow_is_cannon_base_object(void);
 static u8 dynamic_shadow_allows_shadow_alpha_layer(void);
 static u8 dynamic_shadow_is_platform_interaction_caster(void);
 static u8 dynamic_shadow_requires_static_floor_receiver(void);
@@ -166,8 +168,13 @@ static u8 dynamic_shadow_object_is_held(struct Object *obj);
 static u8 dynamic_shadow_never_keep_original_shadow(void);
 static u8 dynamic_shadow_behavior_is(const BehaviorScript *behavior,
                                      const BehaviorScript *candidate);
+static u8 dynamic_shadow_behavior_is_bowser_course_platform(const BehaviorScript *behavior);
+static u8 dynamic_shadow_surface_requires_blob_fallback(struct Surface *surface);
 static const BehaviorScript *dynamic_shadow_current_behavior(void);
 static void dynamic_shadow_get_model_anchor(Vec3f dst, Vec3f shadowPos);
+static f32 dynamic_shadow_get_held_object_blob_scale(void);
+static u8 dynamic_shadow_held_object_needs_blob_fallback(void);
+static u8 sHeldObjectShadowRendered = FALSE;
 static u8 sCurrentObjectDynamicShadowGenerated = FALSE;
 static u8 sCurrentObjectPlatformInteractionCaster = FALSE;
 static u8 sUseShadowNodeAnchor = FALSE;
@@ -206,6 +213,7 @@ static f32 sDynamicShadowBillboardGeoScale = 1.0f;
 #include "enhancements/dynamic_shadows.inc.c"
 
 static void dynamic_shadow_update_light_matrices(void);
+static void geo_append_display_list2(void *displayList, void *displayListInterpolated, s16 layer);
 
 static void geo_emit_dynamic_shadow_mode(u8 enabled) {
     gDPForceFlush(gDisplayListHead++);
@@ -363,8 +371,97 @@ static void dynamic_shadow_measure_billboard_bounds(struct GraphNode *node, Vec3
     } while (cur != NULL && cur != first);
 }
 
+static u8 dynamic_shadow_node_contains_display_list(struct GraphNode *node, const Gfx *target) {
+    struct GraphNode *first = node;
+    struct GraphNode *cur = first;
+    void *targetVirtual;
+
+    if (cur == NULL || target == NULL) {
+        return FALSE;
+    }
+
+    targetVirtual = dynamic_shadow_gfx_arg_to_virtual((uintptr_t) target);
+    do {
+        switch (cur->type) {
+            case GRAPH_NODE_TYPE_ANIMATED_PART:
+                if (dynamic_shadow_gfx_arg_to_virtual(
+                        (uintptr_t) ((struct GraphNodeAnimatedPart *) cur)->displayList)
+                    == targetVirtual) {
+                    return TRUE;
+                }
+                break;
+            case GRAPH_NODE_TYPE_BILLBOARD:
+                if (dynamic_shadow_gfx_arg_to_virtual(
+                        (uintptr_t) ((struct GraphNodeBillboard *) cur)->displayList)
+                    == targetVirtual) {
+                    return TRUE;
+                }
+                break;
+            case GRAPH_NODE_TYPE_DISPLAY_LIST:
+                if (dynamic_shadow_gfx_arg_to_virtual(
+                        (uintptr_t) ((struct GraphNodeDisplayList *) cur)->displayList)
+                    == targetVirtual) {
+                    return TRUE;
+                }
+                break;
+            case GRAPH_NODE_TYPE_SCALE:
+                if (dynamic_shadow_gfx_arg_to_virtual(
+                        (uintptr_t) ((struct GraphNodeScale *) cur)->displayList)
+                    == targetVirtual) {
+                    return TRUE;
+                }
+                break;
+        }
+
+        if (cur->children != NULL
+            && dynamic_shadow_node_contains_display_list(cur->children, target)) {
+            return TRUE;
+        }
+        cur = cur->next;
+    } while (cur != NULL && cur != first);
+
+    return FALSE;
+}
+
 static u8 dynamic_shadow_should_emit_billboard_circle(f32 radius) {
     return radius >= 4.0f;
+}
+
+static Gfx *dynamic_shadow_create_circle(f32 radius) {
+    enum { CIRCLE_SEGMENTS = 12 };
+    Vtx *verts;
+    Gfx *baseDisplayList;
+    Gfx *displayList;
+    s32 i;
+    u8 alpha = 255;
+
+    if (radius <= 0.0f) {
+        return NULL;
+    }
+
+    verts = alloc_display_list((CIRCLE_SEGMENTS + 1) * sizeof(*verts));
+    baseDisplayList = alloc_display_list((CIRCLE_SEGMENTS + 4) * sizeof(*displayList));
+    displayList = baseDisplayList;
+    if (verts == NULL || displayList == NULL) {
+        return NULL;
+    }
+
+    make_vertex(verts, 0, 0, 0, 0, 0, 0, 255, 255, 255, alpha);
+    for (i = 0; i < CIRCLE_SEGMENTS; i++) {
+        s16 angle = (0x10000 / CIRCLE_SEGMENTS) * i;
+        make_vertex(verts, i + 1, radius * coss(angle), 0, radius * sins(angle),
+                    0, 0, 255, 255, 255, alpha);
+    }
+
+    gSPClearGeometryMode(displayList++, G_CULL_BOTH);
+    gSPVertex(displayList++, verts, CIRCLE_SEGMENTS + 1, 0);
+    for (i = 0; i < CIRCLE_SEGMENTS; i++) {
+        gSP1Triangle(displayList++, 0, i + 1, (i + 1) % CIRCLE_SEGMENTS + 1, 0);
+    }
+    gSPDisplayList(displayList++, dl_shadow_end);
+    gSPEndDisplayList(displayList);
+
+    return baseDisplayList;
 }
 
 static void dynamic_shadow_transform_point(Vec3f dst, Mat4 mtx, Vec3f point) {
@@ -405,19 +502,13 @@ static void dynamic_shadow_projected_local_point_to_world(Vec3f dst, Mat4 projec
 
 static Gfx *dynamic_shadow_create_billboard_circle(struct GraphNodeBillboard *node,
                                                    Vec3f center) {
-    enum { CIRCLE_SEGMENTS = 12 };
-    Vtx *verts;
-    Gfx *baseDisplayList;
-    Gfx *displayList;
     Vec3f min;
     Vec3f max;
     f32 width;
     f32 height;
     f32 depth;
     f32 radius;
-    s32 i;
     u8 found = FALSE;
-    u8 alpha = 255;
 
     dynamic_shadow_measure_gfx_bounds(node->displayList, min, max, &found, 0);
     dynamic_shadow_measure_billboard_bounds(node->node.children, min, max, &found);
@@ -445,41 +536,77 @@ static Gfx *dynamic_shadow_create_billboard_circle(struct GraphNodeBillboard *no
             radius = sDynamicShadowBillboardScale * 1.35f;
         }
         if (dynamic_shadow_behavior_is(dynamic_shadow_current_behavior(), bhvChuckya)
-            && radius < sDynamicShadowBillboardScale * 4.5f) {
-            radius = sDynamicShadowBillboardScale * 4.5f;
+            && dynamic_shadow_node_contains_display_list(&node->node, chuckya_seg8_dl_0800A068)) {
+            radius = sDynamicShadowBillboardScale > 0.0f
+                ? sDynamicShadowBillboardScale * 1.05f : 105.0f;
         }
     } else {
         vec3f_set(center, 0.0f, 0.0f, 0.0f);
         radius = sDynamicShadowBillboardScale > 0.0f ? sDynamicShadowBillboardScale * 0.25f : 32.0f;
     }
 
-    if (radius <= 0.0f) {
-        return NULL;
+    return dynamic_shadow_create_circle(radius);
+}
+
+static void dynamic_shadow_append_circle_on_receiver(Gfx *circleList, Vec3f circleCenter) {
+    Mat4 projectedMtx;
+    Mat4 projectedMtxInterpolated;
+    Mat4 circleMtx;
+    Vec3f circleWorld;
+    Vec3f circleWorldInterpolated;
+    Vec3f surfaceNormal;
+    Mtx *mtx;
+    Mtx *mtxInterpolated;
+
+    if (circleList == NULL || gCurGraphNodeCamera == NULL) {
+        return;
     }
 
-    verts = alloc_display_list((CIRCLE_SEGMENTS + 1) * sizeof(*verts));
-    baseDisplayList = alloc_display_list((CIRCLE_SEGMENTS + 4) * sizeof(*displayList));
-    displayList = baseDisplayList;
-    if (verts == NULL || displayList == NULL) {
-        return NULL;
+    mtx = alloc_display_list(sizeof(*mtx));
+    mtxInterpolated = alloc_display_list(sizeof(*mtxInterpolated));
+    if (mtx == NULL || mtxInterpolated == NULL) {
+        return;
     }
 
-    make_vertex(verts, 0, 0, 0, 0, 0, 0, 255, 255, 255, alpha);
-    for (i = 0; i < CIRCLE_SEGMENTS; i++) {
-        s16 angle = (0x10000 / CIRCLE_SEGMENTS) * i;
-        make_vertex(verts, i + 1, radius * coss(angle), 0, radius * sins(angle),
-                    0, 0, 255, 255, 255, alpha);
-    }
+    mtxf_copy(projectedMtx, gMatStack[gMatStackIndex]);
+    mtxf_copy(projectedMtxInterpolated, gMatStackInterpolated[gMatStackIndex]);
+    dynamic_shadow_projected_local_point_to_world(circleWorld, projectedMtx,
+                                                 *gCurGraphNodeCamera->matrixPtr,
+                                                 circleCenter);
+    dynamic_shadow_projected_local_point_to_world(circleWorldInterpolated,
+                                                 projectedMtxInterpolated,
+                                                 *gCurGraphNodeCamera->matrixPtrInterpolated,
+                                                 circleCenter);
 
-    gSPClearGeometryMode(displayList++, G_CULL_BOTH);
-    gSPVertex(displayList++, verts, CIRCLE_SEGMENTS + 1, 0);
-    for (i = 0; i < CIRCLE_SEGMENTS; i++) {
-        gSP1Triangle(displayList++, 0, i + 1, (i + 1) % CIRCLE_SEGMENTS + 1, 0);
+    gMatStackIndex++;
+    if (sAppendingDynamicShadowSurface != NULL) {
+        surfaceNormal[0] = sAppendingDynamicShadowSurface->normal.x;
+        surfaceNormal[1] = sAppendingDynamicShadowSurface->normal.y;
+        surfaceNormal[2] = sAppendingDynamicShadowSurface->normal.z;
+        mtxf_align_terrain_normal(circleMtx, surfaceNormal, circleWorld, 0);
+    } else {
+        mtxf_translate(circleMtx, circleWorld);
     }
-    gSPDisplayList(displayList++, dl_shadow_end);
-    gSPEndDisplayList(displayList);
+    mtxf_mul(gMatStack[gMatStackIndex], circleMtx, *gCurGraphNodeCamera->matrixPtr);
+    mtxf_to_mtx(mtx, gMatStack[gMatStackIndex]);
+    gMatStackFixed[gMatStackIndex] = mtx;
 
-    return baseDisplayList;
+    if (sAppendingDynamicShadowSurface != NULL) {
+        surfaceNormal[0] = sAppendingDynamicShadowSurface->normal.x;
+        surfaceNormal[1] = sAppendingDynamicShadowSurface->normal.y;
+        surfaceNormal[2] = sAppendingDynamicShadowSurface->normal.z;
+        mtxf_align_terrain_normal(circleMtx, surfaceNormal, circleWorldInterpolated, 0);
+    } else {
+        mtxf_translate(circleMtx, circleWorldInterpolated);
+    }
+    mtxf_mul(gMatStackInterpolated[gMatStackIndex], circleMtx,
+             *gCurGraphNodeCamera->matrixPtrInterpolated);
+    mtxf_to_mtx(mtxInterpolated, gMatStackInterpolated[gMatStackIndex]);
+    gMatStackInterpolatedFixed[gMatStackIndex] = mtxInterpolated;
+
+    geo_append_display_list2((void *) VIRTUAL_TO_PHYSICAL(circleList),
+                             (void *) VIRTUAL_TO_PHYSICAL(circleList), LAYER_OPAQUE);
+    gMatStackIndex--;
 }
 #endif
 
@@ -639,6 +766,11 @@ static void geo_append_display_list2(void *displayList, void *displayListInterpo
             && !dynamic_shadow_allows_shadow_alpha_layer()) {
             return;
         }
+        if (sAppendingDynamicShadow && dynamic_shadow_is_cannon_base_object()
+            && dynamic_shadow_gfx_arg_to_virtual((uintptr_t) displayList)
+                == dynamic_shadow_gfx_arg_to_virtual((uintptr_t) cannon_base_seg8_dl_080057F8)) {
+            return;
+        }
         // Per-display-list safety cap (redundant with the per-object cap in
         // can_render_model_object, but guards against objects with many parts)
         if (sAppendingDynamicShadow && !dynamic_shadow_is_platform_interaction_caster()
@@ -668,7 +800,7 @@ static void geo_append_display_list2(void *displayList, void *displayListInterpo
             listNode->dynamicShadowGroup = sAppendingDynamicShadowGroup;
             listNode->dynamicShadowUnderwaterTint = gDynamicShadowUnderwaterTint;
             layer = LAYER_OPAQUE;
-        } else if (sSuppressDynamicShadowReceiver) {
+        } else if (sSuppressDynamicShadowReceiver || gCurGraphNodeHeldObject != NULL) {
             listNode->dynamicShadow = 2;
         } else {
             listNode->dynamicShadow = 0;
@@ -1067,13 +1199,7 @@ static void geo_process_billboard(struct GraphNodeBillboard *node) {
     // aligned to the receiver surface so projection angle cannot distort it.
     if (sAppendingDynamicShadow) {
         Gfx *circleList;
-        Mat4 projectedMtx;
-        Mat4 projectedMtxInterpolated;
-        Mat4 circleMtx;
         Vec3f circleCenter;
-        Vec3f circleWorld;
-        Vec3f circleWorldInterpolated;
-        Vec3f surfaceNormal;
 
         mtx = alloc_display_list(sizeof(*mtx));
         mtxInterpolated = alloc_display_list(sizeof(*mtxInterpolated));
@@ -1095,46 +1221,8 @@ static void geo_process_billboard(struct GraphNodeBillboard *node) {
         mtxf_to_mtx(mtxInterpolated, gMatStackInterpolated[gMatStackIndex]);
         gMatStackInterpolatedFixed[gMatStackIndex] = mtxInterpolated;
 
-        mtxf_copy(projectedMtx, gMatStack[gMatStackIndex]);
-        mtxf_copy(projectedMtxInterpolated, gMatStackInterpolated[gMatStackIndex]);
         circleList = dynamic_shadow_create_billboard_circle(node, circleCenter);
-        if (circleList != NULL) {
-            dynamic_shadow_projected_local_point_to_world(circleWorld, projectedMtx,
-                                                         *gCurGraphNodeCamera->matrixPtr,
-                                                         circleCenter);
-            dynamic_shadow_projected_local_point_to_world(circleWorldInterpolated,
-                                                         projectedMtxInterpolated,
-                                                         *gCurGraphNodeCamera->matrixPtrInterpolated,
-                                                         circleCenter);
-
-            if (sAppendingDynamicShadowSurface != NULL) {
-                surfaceNormal[0] = sAppendingDynamicShadowSurface->normal.x;
-                surfaceNormal[1] = sAppendingDynamicShadowSurface->normal.y;
-                surfaceNormal[2] = sAppendingDynamicShadowSurface->normal.z;
-                mtxf_align_terrain_normal(circleMtx, surfaceNormal, circleWorld, 0);
-            } else {
-                mtxf_translate(circleMtx, circleWorld);
-            }
-            mtxf_mul(gMatStack[gMatStackIndex], circleMtx, *gCurGraphNodeCamera->matrixPtr);
-            mtxf_to_mtx(mtx, gMatStack[gMatStackIndex]);
-            gMatStackFixed[gMatStackIndex] = mtx;
-
-            if (sAppendingDynamicShadowSurface != NULL) {
-                surfaceNormal[0] = sAppendingDynamicShadowSurface->normal.x;
-                surfaceNormal[1] = sAppendingDynamicShadowSurface->normal.y;
-                surfaceNormal[2] = sAppendingDynamicShadowSurface->normal.z;
-                mtxf_align_terrain_normal(circleMtx, surfaceNormal, circleWorldInterpolated, 0);
-            } else {
-                mtxf_translate(circleMtx, circleWorldInterpolated);
-            }
-            mtxf_mul(gMatStackInterpolated[gMatStackIndex], circleMtx,
-                     *gCurGraphNodeCamera->matrixPtrInterpolated);
-            mtxf_to_mtx(mtxInterpolated, gMatStackInterpolated[gMatStackIndex]);
-            gMatStackInterpolatedFixed[gMatStackIndex] = mtxInterpolated;
-
-            geo_append_display_list2((void *) VIRTUAL_TO_PHYSICAL(circleList),
-                                     (void *) VIRTUAL_TO_PHYSICAL(circleList), LAYER_OPAQUE);
-        }
+        dynamic_shadow_append_circle_on_receiver(circleList, circleCenter);
         gMatStackIndex--;
         return;
     }
@@ -1343,6 +1431,9 @@ static void geo_process_animated_part(struct GraphNodeAnimatedPart *node) {
     Mtx *mtxInterpolated = alloc_display_list(sizeof(*mtxInterpolated));
     u16 *animAttribute = gCurrAnimAttribute;
     u8 animType = gCurAnimType;
+#ifdef TARGET_N3DS
+    u8 skipChuckyaFaceLayer = FALSE;
+#endif
 
     vec3s_copy(rotation, gVec3sZero);
     vec3f_set(translation, node->translation[0], node->translation[1], node->translation[2]);
@@ -1364,6 +1455,14 @@ static void geo_process_animated_part(struct GraphNodeAnimatedPart *node) {
     mtxf_to_mtx(mtxInterpolated, gMatStackInterpolated[gMatStackIndex]);
     gMatStackInterpolatedFixed[gMatStackIndex] = mtxInterpolated;
     if (node->displayList != NULL) {
+#ifdef TARGET_N3DS
+        skipChuckyaFaceLayer =
+            sAppendingDynamicShadow
+            && dynamic_shadow_behavior_is(dynamic_shadow_current_behavior(), bhvChuckya)
+            && dynamic_shadow_gfx_arg_to_virtual((uintptr_t) node->displayList)
+                == dynamic_shadow_gfx_arg_to_virtual((uintptr_t) chuckya_seg8_dl_0800A758);
+        if (!skipChuckyaFaceLayer)
+#endif
         geo_append_display_list(node->displayList, node->node.flags >> 8);
     }
     if (node->node.children != NULL) {
@@ -1538,6 +1637,16 @@ static s16 dynamic_shadow_get_object_culling_radius(void) {
         }
         return (s16) radius;
     }
+    if (obj->behavior == segmented_to_virtual(bhvWoodenPost)) {
+        radius = 500.0f * obj->header.gfx.scale[0];
+        if (radius < 500.0f) {
+            radius = 500.0f;
+        }
+        if (radius > 1000.0f) {
+            radius = 1000.0f;
+        }
+        return (s16) radius;
+    }
     if (obj->behavior == segmented_to_virtual(bhvSwingPlatform)
         || obj->behavior == segmented_to_virtual(bhvDonutPlatform)
         || obj->behavior == segmented_to_virtual(bhvRrElevatorPlatform)
@@ -1605,6 +1714,29 @@ static u8 dynamic_shadow_object_is_clear_on_screen(void) {
 
 static u8 dynamic_shadow_is_bobomb_like(void) {
     return FALSE;
+}
+
+static u8 dynamic_shadow_is_cannon_base_object(void) {
+    const BehaviorScript *behavior = dynamic_shadow_current_behavior();
+
+    if (behavior == NULL) {
+        return FALSE;
+    }
+
+    return dynamic_shadow_behavior_is(behavior, bhvCannon)
+        || dynamic_shadow_behavior_is(behavior, bhvWaterBombCannon)
+        || dynamic_shadow_behavior_is(behavior, bhvCannonBaseUnused);
+}
+
+static u8 dynamic_shadow_is_cannon_barrel_object(void) {
+    const BehaviorScript *behavior = dynamic_shadow_current_behavior();
+
+    if (behavior == NULL) {
+        return FALSE;
+    }
+
+    return dynamic_shadow_behavior_is(behavior, bhvCannonBarrel)
+        || dynamic_shadow_behavior_is(behavior, bhvCannonBarrelBubbles);
 }
 
 static const BehaviorScript *dynamic_shadow_current_behavior(void) {
@@ -1796,7 +1928,6 @@ static u8 dynamic_shadow_is_excluded_platform(void) {
         && obj->header.gfx.sharedChild == gLoadedGraphNodes[MODEL_WF_ROTATING_PLATFORM]) {
         return TRUE;
     }
-
     return FALSE;
 }
 
@@ -1819,13 +1950,42 @@ static u8 dynamic_shadow_is_ghost_platform_caster(void) {
         && behavior == segmented_to_virtual(bhvStaticObject)) {
         return TRUE;
     }
-    if ((gCurrLevelNum == LEVEL_BITFS || gCurrLevelNum == LEVEL_BITDW
-         || gCurrLevelNum == LEVEL_BITS)
-        && behavior == segmented_to_virtual(bhvSquishablePlatform)) {
+    if (dynamic_shadow_behavior_is_bowser_course_platform(behavior)) {
         return TRUE;
     }
 
     return FALSE;
+}
+
+static u8 dynamic_shadow_behavior_is_bowser_course_platform(const BehaviorScript *behavior) {
+    if (behavior == NULL) {
+        return FALSE;
+    }
+    if (gCurrLevelNum != LEVEL_BITDW && gCurrLevelNum != LEVEL_BITFS
+        && gCurrLevelNum != LEVEL_BITS) {
+        return FALSE;
+    }
+
+    return behavior == segmented_to_virtual(bhvSquarishPathMoving)
+        || behavior == segmented_to_virtual(bhvSlidingPlatform2)
+        || behavior == segmented_to_virtual(bhvSeesawPlatform)
+        || behavior == segmented_to_virtual(bhvFerrisWheelAxle)
+        || behavior == segmented_to_virtual(bhvFerrisWheelPlatform)
+        || behavior == segmented_to_virtual(bhvPlatformOnTrack)
+        || behavior == segmented_to_virtual(bhvOctagonalPlatformRotating)
+        || behavior == segmented_to_virtual(bhvActivatedBackAndForthPlatform)
+        || behavior == segmented_to_virtual(bhvAnimatesOnFloorSwitchPress)
+        || behavior == segmented_to_virtual(bhvFloorSwitchAnimatesObject)
+        || behavior == segmented_to_virtual(bhvWarpPipe)
+        || behavior == segmented_to_virtual(bhvBitfsSinkingPlatforms)
+        || behavior == segmented_to_virtual(bhvBitfsSinkingCagePlatform)
+        || behavior == segmented_to_virtual(bhvBitfsTiltingInvertedPyramid)
+        || behavior == segmented_to_virtual(bhvSquishablePlatform)
+        || behavior == segmented_to_virtual(bhvWfTumblingBridge);
+}
+
+static u8 dynamic_shadow_current_caster_is_bowser_course_platform(void) {
+    return dynamic_shadow_behavior_is_bowser_course_platform(dynamic_shadow_current_behavior());
 }
 
 static u8 dynamic_shadow_is_wf_terrain_object(void) {
@@ -1842,7 +2002,6 @@ static u8 dynamic_shadow_is_wf_terrain_object(void) {
         || dynamic_shadow_behavior_is(behavior, bhvGiantPole)
         || dynamic_shadow_behavior_is(behavior, bhvSmallBomp)
         || dynamic_shadow_behavior_is(behavior, bhvLargeBomp)
-        || dynamic_shadow_behavior_is(behavior, bhvWfRotatingWoodenPlatform)
         || dynamic_shadow_behavior_is(behavior, bhvWfSlidingPlatform)
         || dynamic_shadow_behavior_is(behavior, bhvWfTumblingBridge)
         || dynamic_shadow_behavior_is(behavior, bhvWfBreakableWallRight)
@@ -1902,7 +2061,11 @@ static u8 dynamic_shadow_is_fixed_interaction_object(void) {
         || dynamic_shadow_behavior_is(behavior, bhvFloorSwitchHardcodedModel)
         || dynamic_shadow_behavior_is(behavior, bhvFloorSwitchHiddenObjects)
         || dynamic_shadow_behavior_is(behavior, bhvPurpleSwitchHiddenBoxes)
-        || dynamic_shadow_behavior_is(behavior, bhvBookSwitch);
+        || dynamic_shadow_behavior_is(behavior, bhvBookSwitch)
+        || dynamic_shadow_behavior_is(behavior, bhvCapSwitchBase)
+        || dynamic_shadow_behavior_is(behavior, bhvCapSwitch)
+        || dynamic_shadow_behavior_is(behavior, bhvBlueCoinSwitch)
+        || dynamic_shadow_behavior_is(behavior, bhvWoodenPost);
 }
 
 static u8 dynamic_shadow_behavior_is_platform_shadow_caster_allowed(
@@ -1912,7 +2075,7 @@ static u8 dynamic_shadow_behavior_is_platform_shadow_caster_allowed(
     }
     if (gCurrLevelNum == LEVEL_BITDW || gCurrLevelNum == LEVEL_BITFS
         || gCurrLevelNum == LEVEL_BITS) {
-        return FALSE;
+        return behavior == segmented_to_virtual(bhvPushableMetalBox);
     }
 
     return behavior == segmented_to_virtual(bhvRrElevatorPlatform)
@@ -1989,14 +2152,37 @@ static u8 dynamic_shadow_behavior_is_platform_shadow_caster_allowed(
         || behavior == segmented_to_virtual(bhvDonutPlatform)
         || behavior == segmented_to_virtual(bhvTTCRotatingSolid)
         || behavior == segmented_to_virtual(bhvTTCPendulum)
+        || behavior == segmented_to_virtual(bhvTTCTreadmill)
+        || behavior == segmented_to_virtual(bhvTTCMovingBar)
+        || behavior == segmented_to_virtual(bhvTTCCog)
         || behavior == segmented_to_virtual(bhvTTCPitBlock)
         || behavior == segmented_to_virtual(bhvTTC2DRotator)
-        || behavior == segmented_to_virtual(bhvTTCElevator);
+        || behavior == segmented_to_virtual(bhvTTCElevator)
+        || behavior == segmented_to_virtual(bhvTTCSpinner);
 }
 
 static u8 dynamic_shadow_is_platform_shadow_caster_allowed(void) {
     return dynamic_shadow_behavior_is_platform_shadow_caster_allowed(
         dynamic_shadow_current_behavior());
+}
+
+static u8 dynamic_shadow_is_large_platform_shadow_caster(void) {
+    const BehaviorScript *behavior = dynamic_shadow_current_behavior();
+
+    if (behavior == NULL) {
+        return FALSE;
+    }
+
+    return behavior == segmented_to_virtual(bhvTowerPlatformGroup)
+        || behavior == segmented_to_virtual(bhvBooBossSpawnedBridge)
+        || behavior == segmented_to_virtual(bhvLllFloatingWoodBridge)
+        || behavior == segmented_to_virtual(bhvRrCruiserWing)
+        || behavior == segmented_to_virtual(bhvSslMovingPyramidWall)
+        || behavior == segmented_to_virtual(bhvPyramidTop)
+        || behavior == segmented_to_virtual(bhvOctagonalPlatformRotating)
+        || behavior == segmented_to_virtual(bhvLllRotatingHexagonalPlatform)
+        || behavior == segmented_to_virtual(bhvLllMovingOctagonalMeshPlatform)
+        || behavior == segmented_to_virtual(bhvLllRotatingHexagonalRing);
 }
 
 static u8 dynamic_shadow_is_receiver_only_platform(void) {
@@ -2105,7 +2291,8 @@ static u8 dynamic_shadow_never_keep_original_shadow(void) {
 
     return dynamic_shadow_behavior_is(behavior, bhvCapSwitchBase)
         || dynamic_shadow_behavior_is(behavior, bhvCapSwitch)
-        || dynamic_shadow_behavior_is(behavior, bhvBlueCoinSwitch);
+        || dynamic_shadow_behavior_is(behavior, bhvBlueCoinSwitch)
+        || dynamic_shadow_behavior_is(behavior, bhvWoodenPost);
 }
 
 static u8 dynamic_shadow_should_suppress_self_receiver(void) {
@@ -2241,6 +2428,10 @@ static u8 dynamic_shadow_surface_type_can_receive(struct Surface *surface) {
 
 static u8 dynamic_shadow_surface_can_receive(struct Surface *floor) {
     if (!dynamic_shadow_surface_type_can_receive(floor)) {
+        return FALSE;
+    }
+    if (gCurrLevelNum == LEVEL_BITS && floor != NULL && floor->object == NULL
+        && dynamic_shadow_current_caster_is_bowser_course_platform()) {
         return FALSE;
     }
     if (floor->normal.y < 0.25f) {
@@ -2669,6 +2860,34 @@ static u8 dynamic_shadow_object_is_held(struct Object *obj) {
         || (gMarioState != NULL && gMarioState->heldObj == obj);
 }
 
+static f32 dynamic_shadow_get_held_object_blob_scale(void) {
+    const BehaviorScript *behavior;
+
+    if (gCurGraphNodeHeldObject == NULL || gCurGraphNodeHeldObject->objNode == NULL) {
+        return 80.0f;
+    }
+
+    behavior = gCurGraphNodeHeldObject->objNode->behavior;
+    if (dynamic_shadow_behavior_is(behavior, bhvBreakableBoxSmall)
+        || dynamic_shadow_behavior_is(behavior, bhvJumpingBox)) {
+        return 90.0f;
+    }
+
+    return 80.0f;
+}
+
+static u8 dynamic_shadow_held_object_needs_blob_fallback(void) {
+    const BehaviorScript *behavior;
+
+    if (gCurGraphNodeHeldObject == NULL || gCurGraphNodeHeldObject->objNode == NULL) {
+        return FALSE;
+    }
+
+    behavior = gCurGraphNodeHeldObject->objNode->behavior;
+    return dynamic_shadow_behavior_is(behavior, bhvBreakableBoxSmall)
+        || dynamic_shadow_behavior_is(behavior, bhvJumpingBox);
+}
+
 static void dynamic_shadow_surface_to_geometry(struct FloorGeometry *floorGeo, struct Surface *surface) {
     floorGeo->normalX = surface->normal.x;
     floorGeo->normalY = surface->normal.y;
@@ -2912,6 +3131,9 @@ static u8 dynamic_shadow_surface_near_mask(struct Surface *surface, Vec3f center
     if (!dynamic_shadow_surface_can_receive(surface)) {
         return FALSE;
     }
+    if (dynamic_shadow_surface_requires_blob_fallback(surface)) {
+        return FALSE;
+    }
     dynamic_shadow_surface_bounds(surface, min, max);
     if (max[1] < anchorHeight - DYNAMIC_SHADOW_STEP_HEIGHT
         || min[1] > anchorHeight + DYNAMIC_SHADOW_STEP_HEIGHT) {
@@ -3000,6 +3222,110 @@ static s32 dynamic_shadow_collect_connected_surfaces(struct Surface *anchor, Vec
     }
 
     return connectedCount;
+}
+
+static u8 dynamic_shadow_surface_requires_blob_fallback(struct Surface *surface) {
+    Vec3f min;
+    Vec3f max;
+
+    if (surface == NULL) {
+        return FALSE;
+    }
+
+    if (gCurrLevelNum != LEVEL_BITS) {
+        return FALSE;
+    }
+
+    dynamic_shadow_surface_bounds(surface, min, max);
+
+    // BITS area 1 is drawn on the alpha layer, and a few large static chunks can
+    // leak the receiver mask into the level display list state. Keep fallback
+    // local to the high platforms that showed the black-face issue so the rest
+    // of the course still receives dynamic shadows.
+    return (max[0] >= -5600.0f && min[0] <= -900.0f
+            && max[1] >= 3400.0f && min[1] <= 4100.0f
+            && max[2] >= -1800.0f && min[2] <= -200.0f)
+        || (max[0] >= -1800.0f && min[0] <= 900.0f
+            && max[1] >= 2700.0f && min[1] <= 3450.0f
+            && max[2] >= -1550.0f && min[2] <= -450.0f)
+        || (max[0] >= -7900.0f && min[0] <= -4100.0f
+            && max[1] >= 1800.0f && min[1] <= 2700.0f
+            && max[2] >= -1900.0f && min[2] <= 150.0f)
+        || (max[0] >= 650.0f && min[0] <= 2700.0f
+            && max[1] >= 4200.0f && min[1] <= 4850.0f
+            && max[2] >= -2700.0f && min[2] <= -150.0f)
+        || (max[0] >= 6000.0f && min[0] <= 7900.0f
+            && max[1] >= 3800.0f && min[1] <= 4700.0f
+            && max[2] >= -3600.0f && min[2] <= -400.0f)
+        || (max[0] >= -900.0f && min[0] <= 1600.0f
+            && max[1] >= 5850.0f && min[1] <= 6600.0f
+            && max[2] >= -4700.0f && min[2] <= -1900.0f);
+}
+
+static u8 dynamic_shadow_is_bits_allowed_enemy(void) {
+    const BehaviorScript *behavior = dynamic_shadow_current_behavior();
+    if (behavior == NULL) return FALSE;
+    // Whitelist: only these enemies get dynamic shadows in BITS — everything
+    // else falls back to vanilla blob shadow to avoid mask geometry leaking
+    // stencil onto the problem platform below the octagonal rotating platform.
+    return dynamic_shadow_behavior_is(behavior, bhvGoomba)
+        || dynamic_shadow_behavior_is(behavior, bhvBobomb)
+        || dynamic_shadow_behavior_is(behavior, bhvBobombBuddy)
+        || dynamic_shadow_behavior_is(behavior, bhvSmallWhomp)
+        || dynamic_shadow_behavior_is(behavior, bhvChuckya);
+}
+
+static u8 dynamic_shadow_is_bits_allowed_item(void) {
+    const BehaviorScript *behavior = dynamic_shadow_current_behavior();
+    if (behavior == NULL) return FALSE;
+    // Whitelist: only these items get dynamic shadows in BITS — everything
+    // else falls back to vanilla blob shadow to avoid mask geometry leaking
+    // stencil onto the problem platform below the octagonal rotating platform.
+    return dynamic_shadow_behavior_is(behavior, bhvPushableMetalBox)
+        || dynamic_shadow_behavior_is(behavior, bhvExclamationBox)
+        || dynamic_shadow_behavior_is(behavior, bhvPoleGrabbing)
+        || dynamic_shadow_behavior_is(behavior, bhvCirclingAmp)
+        || dynamic_shadow_behavior_is(behavior, bhvHomingAmp)
+        || dynamic_shadow_behavior_is(behavior, bhvPiranhaPlant)
+        || dynamic_shadow_behavior_is(behavior, bhvFirePiranhaPlant);
+}
+
+static u8 dynamic_shadow_is_bits_whitelisted(void) {
+    return dynamic_shadow_is_mario_object()
+        || dynamic_shadow_is_bits_allowed_enemy()
+        || dynamic_shadow_is_bits_allowed_item();
+}
+
+static u8 dynamic_shadow_point_requires_blob_fallback(Vec3f point) {
+    if (gCurrLevelNum != LEVEL_BITS) {
+        return FALSE;
+    }
+
+    if (point[1] < 1200.0f || point[1] > 7200.0f) {
+        return FALSE;
+    }
+
+    // The BITS object-platform chunks can leak dynamic receiver state by whole
+    // coarse triangles. Use broad XZ zones here so casters standing on those
+    // chunks fall back before their projected point gets pushed onto a neighbor.
+    return (point[0] >= -5600.0f && point[0] <= -900.0f
+            && point[2] >= -1800.0f && point[2] <= -200.0f)
+        || (point[0] >= -1800.0f && point[0] <= 900.0f
+            && point[2] >= -1550.0f && point[2] <= -450.0f)
+        || (point[0] >= -7900.0f && point[0] <= -4100.0f
+            && point[2] >= -1900.0f && point[2] <= 150.0f)
+        || (point[0] >= 650.0f && point[0] <= 2700.0f
+            && point[2] >= -2700.0f && point[2] <= -150.0f)
+        || (point[0] >= 3300.0f && point[0] <= 7900.0f
+            && point[2] >= -3600.0f && point[2] <= -400.0f)
+        || (point[0] >= -900.0f && point[0] <= 1600.0f
+            && point[2] >= -4700.0f && point[2] <= -1900.0f);
+}
+
+static u8 dynamic_shadow_projection_requires_blob_fallback(struct Surface *surface,
+                                                           Vec3f projectedPoint) {
+    return dynamic_shadow_surface_requires_blob_fallback(surface)
+        || dynamic_shadow_point_requires_blob_fallback(projectedPoint);
 }
 
 static Gfx *dynamic_shadow_build_receiver_mask(struct Surface *anchor, Vec3f shadowPos,
@@ -3423,12 +3749,24 @@ static u8 dynamic_shadow_can_render_model_object(struct GraphNode *children) {
         gDynamicShadowDebugRejectMode++;
         return FALSE;
     }
-    if (gCurGraphNodeHeldObject != NULL || gCurGraphNodeCamera == NULL || gCurGraphNodeObject == NULL) {
+    if (gCurGraphNodeCamera == NULL || gCurGraphNodeObject == NULL) {
         gDynamicShadowDebugRejectContext++;
         return FALSE;
     }
     if (children == NULL) {
         gDynamicShadowDebugRejectChildren++;
+        return FALSE;
+    }
+    // In BITS, only Mario and select enemies/items get dynamic shadows — all
+    // other objects fall back to vanilla blob shadow.  This avoids mask geometry
+    // leaking stencil onto the problem platform below the octagonal rotating
+    // platform.  Enemy whitelist: Goomba, Bob-omb/Buddy, SmallWhomp, Chuckya.
+    // Item whitelist: PushableMetalBox, ExclamationBox, PoleGrabbing, Amp, PiranhaPlant.
+    if (gCurrLevelNum == LEVEL_BITS
+        && !dynamic_shadow_is_mario_object()
+        && !dynamic_shadow_is_bits_allowed_enemy()
+        && !dynamic_shadow_is_bits_allowed_item()) {
+        gDynamicShadowDebugRejectPlatform++;
         return FALSE;
     }
     obj = (struct Object *) gCurGraphNodeObject;
@@ -3482,6 +3820,10 @@ static u8 dynamic_shadow_can_render_model_object(struct GraphNode *children) {
         gDynamicShadowDebugRejectPlatform++;
         return FALSE;
     }
+    if (dynamic_shadow_is_large_platform_shadow_caster()) {
+        gDynamicShadowDebugRejectPlatform++;
+        return FALSE;
+    }
     if (dynamic_shadow_is_receiver_only_platform()
         && !dynamic_shadow_is_platform_interaction_caster()) {
         gDynamicShadowDebugRejectPlatform++;
@@ -3506,6 +3848,7 @@ static u8 dynamic_shadow_can_render_model_object(struct GraphNode *children) {
 
 static u8 dynamic_shadow_should_keep_original_shadow(struct GraphNodeShadow *node, Vec3f shadowPos) {
     Vec3f anchorPos;
+    Vec3f projectedPoint;
     f32 floorHeight;
     struct Surface *floor;
     struct Surface *projectionSurface;
@@ -3527,7 +3870,17 @@ static u8 dynamic_shadow_should_keep_original_shadow(struct GraphNodeShadow *nod
 
         light = dynamic_shadows_get_light();
         dynamic_shadow_get_model_anchor(anchorPos, shadowPos);
+        if (!dynamic_shadow_is_bits_whitelisted()) {
+            if (dynamic_shadow_point_requires_blob_fallback(anchorPos)) {
+                return TRUE;
+            }
+        }
         if (!dynamic_shadow_find_projection_surface(anchorPos, &projectionSurface, light)) {
+            return TRUE;
+        }
+        dynamic_shadow_project_point_to_surface(projectedPoint, anchorPos, projectionSurface, light);
+        if (!dynamic_shadow_is_bits_whitelisted()
+            && dynamic_shadow_projection_requires_blob_fallback(projectionSurface, projectedPoint)) {
             return TRUE;
         }
 
@@ -3551,7 +3904,17 @@ static u8 dynamic_shadow_should_keep_original_shadow(struct GraphNodeShadow *nod
 
     light = dynamic_shadows_get_light();
     dynamic_shadow_get_model_anchor(anchorPos, shadowPos);
+    if (!dynamic_shadow_is_bits_whitelisted()) {
+        if (dynamic_shadow_point_requires_blob_fallback(anchorPos)) {
+            return TRUE;
+        }
+    }
     if (!dynamic_shadow_find_projection_surface(anchorPos, &projectionSurface, light)) {
+        return TRUE;
+    }
+    dynamic_shadow_project_point_to_surface(projectedPoint, anchorPos, projectionSurface, light);
+    if (!dynamic_shadow_is_bits_whitelisted()
+        && dynamic_shadow_projection_requires_blob_fallback(projectionSurface, projectedPoint)) {
         return TRUE;
     }
 
@@ -3564,14 +3927,34 @@ static u8 dynamic_shadow_should_keep_original_shadow(struct GraphNodeShadow *nod
 }
 
 static void dynamic_shadow_get_model_anchor(Vec3f dst, Vec3f shadowPos) {
+    struct Object *obj;
+    struct Object *parent;
+
     vec3f_copy(dst, shadowPos);
 
     if (!dynamic_shadow_is_mario_object() && gCurGraphNodeObject != NULL
         && (dynamic_shadow_is_platform_interaction_caster() || !sUseShadowNodeAnchor)) {
         vec3f_copy(dst, gCurGraphNodeObject->pos);
     }
-    if (dynamic_shadow_behavior_is(dynamic_shadow_current_behavior(), bhvCannon)) {
-        dst[1] += 340.0f;
+    if (dynamic_shadow_is_cannon_base_object()) {
+        obj = (struct Object *) gCurGraphNodeObject;
+        if (obj != NULL && obj->oFloorHeight > -10000.0f) {
+            dst[1] = obj->oFloorHeight + 180.0f;
+        } else if (obj != NULL) {
+            dst[1] = obj->oHomeY + 180.0f;
+        } else {
+            dst[1] += 340.0f;
+        }
+    } else if (dynamic_shadow_is_cannon_barrel_object()) {
+        obj = (struct Object *) gCurGraphNodeObject;
+        parent = obj != NULL ? obj->parentObj : NULL;
+        if (parent != NULL && parent->oFloorHeight > -10000.0f) {
+            dst[1] = parent->oFloorHeight + 220.0f;
+        } else if (parent != NULL) {
+            dst[1] = parent->oHomeY + 220.0f;
+        } else if (obj != NULL && obj->oFloorHeight > -10000.0f) {
+            dst[1] = obj->oFloorHeight + 220.0f;
+        }
     }
 }
 
@@ -3589,6 +3972,10 @@ static u8 dynamic_shadow_get_original_solidity(struct GraphNodeShadow *node, Vec
 
     floorHeight = dynamic_shadow_find_receiver_floor(shadowPos, &floor);
     if (floorHeight < -10000.0f || floor == NULL) {
+        return node->shadowSolidity;
+    }
+    if (dynamic_shadow_surface_requires_blob_fallback(floor)
+        || dynamic_shadow_point_requires_blob_fallback(shadowPos)) {
         return node->shadowSolidity;
     }
 
@@ -3633,13 +4020,24 @@ static u8 geo_process_dynamic_model_shadow(struct GraphNode *children, Vec3f sha
 
     light = dynamic_shadows_get_light();
     dynamic_shadow_get_model_anchor(anchorPos, shadowPos);
+    if (!dynamic_shadow_is_bits_whitelisted()) {
+        if (dynamic_shadow_point_requires_blob_fallback(anchorPos)) {
+            gDynamicShadowDebugRejectPlatform++;
+            return FALSE;
+        }
+    }
     if (!dynamic_shadow_find_projection_surface(anchorPos, &surface, light)) {
         gDynamicShadowDebugRejectLight++;
         return FALSE;
     }
+    dynamic_shadow_project_point_to_surface(projectedPoint, anchorPos, surface, light);
+    if (!dynamic_shadow_is_bits_whitelisted()
+        && dynamic_shadow_projection_requires_blob_fallback(surface, projectedPoint)) {
+        gDynamicShadowDebugRejectPlatform++;
+        return FALSE;
+    }
     gDynamicShadowDebugCandidateObjects++;
 
-    dynamic_shadow_project_point_to_surface(projectedPoint, anchorPos, surface, light);
     receiverMask = dynamic_shadow_get_receiver_mask(surface, anchorPos, projectedPoint,
                                                     &maskMtx, &maskMtxInterpolated,
                                                     &receiverGroup);
@@ -3656,6 +4054,13 @@ static u8 geo_process_dynamic_model_shadow(struct GraphNode *children, Vec3f sha
     mtxf_mul(projectedMtx, objectMtx, projectionMtx);
     mtxf_mul(shadowMtx, projectedMtx, *gCurGraphNodeCamera->matrixPtr);
     mtxf_mul(shadowMtxInterpolated, projectedMtx, *gCurGraphNodeCamera->matrixPtrInterpolated);
+
+    // Nudge the projected shadow slightly above the ground surface to avoid
+    // z-fighting flicker.  The projection matrix flattens the model onto the
+    // ground plane, so without this offset the shadow polygon sits at exactly
+    // the same depth as the floor.
+    shadowMtx[3][1] += 1.5f;
+    shadowMtxInterpolated[3][1] += 1.5f;
 
     savedAnimState.type = gCurAnimType;
     savedAnimState.enabled = gCurAnimEnabled;
@@ -3848,6 +4253,7 @@ static void geo_process_shadow(struct GraphNodeShadow *node) {
 
 #ifdef TARGET_N3DS
         u8 keepOriginalShadow;
+        u8 originalShadowType = node->shadowType;
         if (gCurGraphNodeHeldObject == NULL
             && !sCurrentObjectDynamicShadowGenerated && node->node.children != NULL) {
             u8 savedUseShadowNodeAnchor = sUseShadowNodeAnchor;
@@ -3860,8 +4266,13 @@ static void geo_process_shadow(struct GraphNodeShadow *node) {
         }
         keepOriginalShadow = gCurGraphNodeHeldObject != NULL
             || dynamic_shadow_should_keep_original_shadow(node, shadowPos);
+        if (gCurGraphNodeHeldObject != NULL) {
+            originalShadowType = SHADOW_CIRCLE_4_VERTS;
+            sHeldObjectShadowRendered = TRUE;
+        }
 #else
         u8 keepOriginalShadow = TRUE;
+        u8 originalShadowType = node->shadowType;
 #endif
         if (keepOriginalShadow) {
             extern u8 gInterpolatingSurfaces;
@@ -3873,14 +4284,23 @@ static void geo_process_shadow(struct GraphNodeShadow *node) {
             gInterpolatingSurfaces = TRUE;
             shadowListInterpolated = create_shadow_below_xyz(shadowPosInterpolated[0], shadowPosInterpolated[1],
                                                              shadowPosInterpolated[2], shadowScale,
-                                                             shadowSolidity, node->shadowType);
+                                                             shadowSolidity, originalShadowType);
             gInterpolatingSurfaces = FALSE;
             shadowList = create_shadow_below_xyz(shadowPos[0], shadowPos[1], shadowPos[2], shadowScale,
-                                                 shadowSolidity, node->shadowType);
+                                                 shadowSolidity, originalShadowType);
             if (shadowListInterpolated != NULL && shadowList != NULL) {
                 mtx = alloc_display_list(sizeof(*mtx));
                 mtxInterpolated = alloc_display_list(sizeof(*mtxInterpolated));
                 gMatStackIndex++;
+
+                // Nudge the translation matrix up by a small amount so the shadow
+                // polygon sits slightly above the floor surface and avoids
+                // z-fighting flicker.  This must happen AFTER create_shadow_below_xyz
+                // (which bakes vertex positions relative to the original shadowPos)
+                // and BEFORE the matrix is built, so the extra Y only affects the
+                // final world-space placement, not the vertex generation.
+                shadowPos[1] += 1.5f;
+                shadowPosInterpolated[1] += 1.5f;
 
                 mtxf_translate(mtxf, shadowPos);
                 mtxf_mul(gMatStack[gMatStackIndex], mtxf, *gCurGraphNodeCamera->matrixPtr);
@@ -3904,9 +4324,6 @@ static void geo_process_shadow(struct GraphNodeShadow *node) {
                 }
                 gMatStackIndex--;
             }
-        }
-        if (gCurGraphNodeHeldObject != NULL) {
-            return;
         }
     }
     if (node->node.children != NULL) {
@@ -4200,6 +4617,15 @@ void geo_process_held_object(struct GraphNodeHeldObject *node) {
     Mtx *mtx = alloc_display_list(sizeof(*mtx));
     Mtx *mtxInterpolated = alloc_display_list(sizeof(*mtxInterpolated));
     Vec3f scaleInterpolated;
+#ifdef TARGET_N3DS
+    u8 savedHeldObjectShadowRendered = sHeldObjectShadowRendered;
+#endif
+
+#ifdef TARGET_N3DS
+    if (sAppendingDynamicShadow) {
+        return;
+    }
+#endif
 
 #ifdef F3DEX_GBI_2
     gSPLookAt(gDisplayListHead++, &lookAt);
@@ -4256,12 +4682,73 @@ void geo_process_held_object(struct GraphNodeHeldObject *node) {
         gGeoTempState.prevFrame = gPrevAnimFrame;
         gCurAnimType = 0;
         gCurGraphNodeHeldObject = (void *) node;
+#ifdef TARGET_N3DS
+        sHeldObjectShadowRendered = FALSE;
+#endif
         if (node->objNode->header.gfx.unk38.curAnim != NULL) {
             geo_set_animation_globals(&node->objNode->header.gfx.unk38, hasAnimation);
         }
 
         geo_process_node_and_siblings(node->objNode->header.gfx.sharedChild);
+#ifdef TARGET_N3DS
+        if (!sHeldObjectShadowRendered && dynamic_shadow_held_object_needs_blob_fallback()) {
+            Vec3f shadowPos;
+            Vec3f shadowPosInterpolated;
+            Gfx *shadowList;
+            Gfx *shadowListInterpolated;
+            Mtx *shadowMtx;
+            Mtx *shadowMtxInterpolated;
+            Mat4 shadowTransform;
+            extern u8 gInterpolatingSurfaces;
+            f32 shadowScale = dynamic_shadow_get_held_object_blob_scale();
+
+            get_pos_from_transform_mtx(shadowPos, gMatStack[gMatStackIndex],
+                                       *gCurGraphNodeCamera->matrixPtr);
+            get_pos_from_transform_mtx(shadowPosInterpolated, gMatStackInterpolated[gMatStackIndex],
+                                       *gCurGraphNodeCamera->matrixPtrInterpolated);
+            gInterpolatingSurfaces = TRUE;
+            shadowListInterpolated = create_shadow_below_xyz(
+                shadowPosInterpolated[0], shadowPosInterpolated[1], shadowPosInterpolated[2],
+                shadowScale, 0xB4, SHADOW_CIRCLE_4_VERTS);
+            gInterpolatingSurfaces = FALSE;
+            shadowList = create_shadow_below_xyz(shadowPos[0], shadowPos[1], shadowPos[2],
+                                                 shadowScale, 0xB4, SHADOW_CIRCLE_4_VERTS);
+            if (shadowListInterpolated != NULL && shadowList != NULL) {
+                shadowMtx = alloc_display_list(sizeof(*shadowMtx));
+                shadowMtxInterpolated = alloc_display_list(sizeof(*shadowMtxInterpolated));
+                gMatStackIndex++;
+
+                mtxf_translate(shadowTransform, shadowPos);
+                mtxf_mul(gMatStack[gMatStackIndex], shadowTransform,
+                         *gCurGraphNodeCamera->matrixPtr);
+                mtxf_to_mtx(shadowMtx, gMatStack[gMatStackIndex]);
+                gMatStackFixed[gMatStackIndex] = shadowMtx;
+
+                mtxf_translate(shadowTransform, shadowPosInterpolated);
+                mtxf_mul(gMatStackInterpolated[gMatStackIndex], shadowTransform,
+                         *gCurGraphNodeCamera->matrixPtrInterpolated);
+                mtxf_to_mtx(shadowMtxInterpolated, gMatStackInterpolated[gMatStackIndex]);
+                gMatStackInterpolatedFixed[gMatStackIndex] = shadowMtxInterpolated;
+
+                if (gShadowAboveWaterOrLava == 1) {
+                    geo_append_display_list2((void *) VIRTUAL_TO_PHYSICAL(shadowList),
+                                             (void *) VIRTUAL_TO_PHYSICAL(shadowListInterpolated), 4);
+                } else if (gMarioOnIceOrCarpet == 1) {
+                    geo_append_display_list2((void *) VIRTUAL_TO_PHYSICAL(shadowList),
+                                             (void *) VIRTUAL_TO_PHYSICAL(shadowListInterpolated), 5);
+                } else {
+                    geo_append_display_list2((void *) VIRTUAL_TO_PHYSICAL(shadowList),
+                                             (void *) VIRTUAL_TO_PHYSICAL(shadowListInterpolated), 6);
+                }
+                gMatStackIndex--;
+                sHeldObjectShadowRendered = TRUE;
+            }
+        }
+#endif
         gCurGraphNodeHeldObject = NULL;
+#ifdef TARGET_N3DS
+        sHeldObjectShadowRendered = savedHeldObjectShadowRendered;
+#endif
         gCurAnimType = gGeoTempState.type;
         gCurAnimEnabled = gGeoTempState.enabled;
         gCurrAnimFrame = gGeoTempState.frame;

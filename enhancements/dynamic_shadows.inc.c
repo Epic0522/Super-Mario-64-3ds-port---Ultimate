@@ -3,6 +3,7 @@
 #include "game/camera.h"
 #include "level_table.h"
 #include "enhancements/dynamic_shadows.h"
+#include "engine/behavior_script.h"
 
 static u8 sDynamicShadowRenderingMode = FALSE;
 static struct DynamicShadowLight sDynamicShadowResolvedLight;
