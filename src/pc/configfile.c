@@ -76,8 +76,10 @@ unsigned int puppycam_degrade = 10;
 unsigned int puppycam_aggression = 35;
 unsigned int puppycam_panlevel = 75;
 unsigned int dynamic_shadows_enabled = 1;
-
-
+#ifdef TARGET_N3DS
+unsigned int config3dsAntiAliasing = 1;
+unsigned int config3dsWideMode = 1;
+#endif
 
 static const struct ConfigOption options[] = {
     {.name = "fullscreen",     .type = CONFIG_TYPE_BOOL, .boolValue = &configFullscreen},
@@ -99,6 +101,10 @@ static const struct ConfigOption options[] = {
     {.name = "puppycam_centre_aggression", .type = CONFIG_TYPE_UINT, .uintValue = &puppycam_aggression},
     {.name = "puppycam_pan_amount", .type = CONFIG_TYPE_UINT, .uintValue = &puppycam_panlevel},
     {.name = "dynamic_shadows_enabled", .type = CONFIG_TYPE_UINT, .uintValue = &dynamic_shadows_enabled},
+#ifdef TARGET_N3DS
+    {.name = "n3ds_anti_aliasing", .type = CONFIG_TYPE_UINT, .uintValue = &config3dsAntiAliasing},
+    {.name = "n3ds_wide_mode", .type = CONFIG_TYPE_UINT, .uintValue = &config3dsWideMode},
+#endif
 #ifndef TARGET_N3DS
     {.name = "key_stickup",    .type = CONFIG_TYPE_UINT, .uintValue = &configKeyStickUp},
     {.name = "key_stickdown",  .type = CONFIG_TYPE_UINT, .uintValue = &configKeyStickDown},

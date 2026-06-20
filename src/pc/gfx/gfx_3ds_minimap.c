@@ -6,6 +6,7 @@
 #include "gfx_3ds.h"
 #include "audio/external.h"
 #include "game/game_init.h"
+#include "game/ingame_menu.h"
 #include "game/level_update.h"
 #include "menu/intro_geo.h"
 #include "menu/level_select_menu.h"
@@ -25,6 +26,7 @@ static C3D_Tex hud_coin_tex;
 static C3D_Tex hud_star_tex;
 static C3D_Tex hud_x_tex;
 static C3D_Tex hud_health_tex[8];
+static C3D_Tex hud_red_coin_tex[4];
 static C3D_Tex hud_digit_tex[10];
 static C3D_Tex title_1996_nintendo_tex;
 static C3D_Tex title_press_start_tex;
@@ -367,6 +369,23 @@ static void gfx_3ds_minimap_draw_health(float *vbo_buffer)
                              sizeof(vertex_list_hud_health), 4.0f, 150.0f);
 }
 
+static void gfx_3ds_minimap_draw_red_coins(float *vbo_buffer)
+{
+    s8 redCoins = gRedCoinsCollected;
+    u8 frame = (gGlobalTimer & 6) >> 1;
+    s8 i;
+
+    if (redCoins < 0)
+        redCoins = 0;
+    if (redCoins > 8)
+        redCoins = 8;
+
+    for (i = 0; i < redCoins; i++) {
+        gfx_3ds_minimap_draw_tex_sized(vbo_buffer, &hud_red_coin_tex[frame],
+                                       16.0f, 16.0f, 8.0f + i * 17.0f, 3.0f);
+    }
+}
+
 static void gfx_3ds_minimap_draw_hud(float *vbo_buffer)
 {
     s16 hudDisplayFlags = gHudDisplay.flags;
@@ -381,6 +400,8 @@ static void gfx_3ds_minimap_draw_hud(float *vbo_buffer)
                                  sizeof(vertex_list_hud_digit), 24.0f, 218.0f);
         gfx_3ds_minimap_draw_number_left(vbo_buffer, gHudDisplay.lives, 40.0f, 218.0f);
     }
+
+    gfx_3ds_minimap_draw_red_coins(vbo_buffer);
 
     if (hudDisplayFlags & HUD_DISPLAY_FLAG_CAMERA_AND_POWER) {
         gfx_3ds_minimap_draw_health(vbo_buffer);
@@ -508,6 +529,10 @@ void gfx_3ds_init_minimap()
     gfx_3ds_minimap_load_hud_texture(&hud_health_tex[5], hud_health_6_t3x, hud_health_6_t3x_size);
     gfx_3ds_minimap_load_hud_texture(&hud_health_tex[6], hud_health_7_t3x, hud_health_7_t3x_size);
     gfx_3ds_minimap_load_hud_texture(&hud_health_tex[7], hud_health_8_t3x, hud_health_8_t3x_size);
+    gfx_3ds_minimap_load_hud_texture(&hud_red_coin_tex[0], hud_red_coin_front_t3x, hud_red_coin_front_t3x_size);
+    gfx_3ds_minimap_load_hud_texture(&hud_red_coin_tex[1], hud_red_coin_tilt_right_t3x, hud_red_coin_tilt_right_t3x_size);
+    gfx_3ds_minimap_load_hud_texture(&hud_red_coin_tex[2], hud_red_coin_side_t3x, hud_red_coin_side_t3x_size);
+    gfx_3ds_minimap_load_hud_texture(&hud_red_coin_tex[3], hud_red_coin_tilt_left_t3x, hud_red_coin_tilt_left_t3x_size);
     gfx_3ds_minimap_load_hud_texture(&hud_digit_tex[0], hud_digit_0_t3x, hud_digit_0_t3x_size);
     gfx_3ds_minimap_load_hud_texture(&hud_digit_tex[1], hud_digit_1_t3x, hud_digit_1_t3x_size);
     gfx_3ds_minimap_load_hud_texture(&hud_digit_tex[2], hud_digit_2_t3x, hud_digit_2_t3x_size);

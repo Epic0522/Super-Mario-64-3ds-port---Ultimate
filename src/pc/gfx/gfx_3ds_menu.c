@@ -3,9 +3,10 @@
 #include "gfx_3ds.h"
 #include "gfx_3ds_menu.h"
 #include "gfx_citro3d.h"
+#include "pc/configfile.h"
 #include "enhancements/death_ragdoll.h"
 
-struct gfx_configuration gfx_config = {false, false}; // AA off, 800px off
+struct gfx_configuration gfx_config = {true, true}; // AA on, 800px on
 
 static C3D_Mtx modelView, projection;
 static int buffer_offset;
@@ -15,6 +16,19 @@ static C3D_Tex aa_off_tex, aa_on_tex;
 static C3D_Tex debug_off_tex, debug_on_tex;
 static C3D_Tex resume_tex, exit_tex;
 static C3D_Tex menu_cleft_tex, menu_cright_tex, menu_cdown_tex, menu_cup_tex;
+
+#define MENU_BUTTON_SIZE 64
+#define MENU_TOP_Y 32
+#define MENU_DRAW_TOP_Y 96
+#define MENU_BOTTOM_Y 144
+#define MENU_DRAW_BOTTOM_Y 208
+#define MENU_AA_X 48
+#define MENU_MODE_X 128
+#define MENU_DEBUG_X 208
+#define MENU_RESUME_X 88
+#define MENU_EXIT_X 168
+
+#define CONFIG_FILE "sm64config.txt"
 
 static int touch_x;
 static int touch_y;
@@ -75,16 +89,18 @@ static void gfx_3ds_menu_draw_button(float *vbo_buffer, int x, int y, C3D_Tex te
 static void gfx_3ds_menu_draw_buttons(float * vertex_buffer)
 {
     // aa
-    gfx_3ds_menu_draw_button(vertex_buffer, 11, 96, gfx_config.useAA ? aa_on_tex : aa_off_tex, false);
+    gfx_3ds_menu_draw_button(vertex_buffer, MENU_AA_X, MENU_DRAW_TOP_Y,
+                             gfx_config.useAA ? aa_on_tex : aa_off_tex, false);
     // screen mode
-    gfx_3ds_menu_draw_button(vertex_buffer, 86, 96, gfx_config.useWide ? mode_800_tex : mode_400_tex, false);
+    gfx_3ds_menu_draw_button(vertex_buffer, MENU_MODE_X, MENU_DRAW_TOP_Y,
+                             gfx_config.useWide ? mode_800_tex : mode_400_tex, false);
     // debug
-    gfx_3ds_menu_draw_button(vertex_buffer, 161, 96,
+    gfx_3ds_menu_draw_button(vertex_buffer, MENU_DEBUG_X, MENU_DRAW_TOP_Y,
                              death_ragdoll_debug_is_enabled() ? debug_on_tex : debug_off_tex, false);
     // resume
-    gfx_3ds_menu_draw_button(vertex_buffer, 11, 208, resume_tex, false);
+    gfx_3ds_menu_draw_button(vertex_buffer, MENU_RESUME_X, MENU_DRAW_BOTTOM_Y, resume_tex, false);
     // exit game
-    gfx_3ds_menu_draw_button(vertex_buffer, 86, 208, exit_tex, false);
+    gfx_3ds_menu_draw_button(vertex_buffer, MENU_EXIT_X, MENU_DRAW_BOTTOM_Y, exit_tex, false);
 }
 
 static void gfx_3ds_menu_draw_cbuttons(float * vertex_buffer)
@@ -104,6 +120,13 @@ static bool is_inside_box(int pos_x, int pos_y, int x, int y, int width, int hei
     return pos_x >= x && pos_x <= (x+width) && pos_y >= y && pos_y <= (y+height);
 }
 
+static void gfx_3ds_menu_save_video_config(void)
+{
+    config3dsAntiAliasing = gfx_config.useAA ? 1 : 0;
+    config3dsWideMode = gfx_config.useWide ? 1 : 0;
+    configfile_save(CONFIG_FILE);
+}
+
 menu_action gfx_3ds_menu_on_touch(int touch_x, int touch_y)
 {
     if (!gShowConfigMenu)
@@ -112,41 +135,48 @@ menu_action gfx_3ds_menu_on_touch(int touch_x, int touch_y)
     }
 
     // toggle anti-aliasing
-    else if (!gGfx3DEnabled && is_inside_box(touch_x, touch_y, 11, 32, 64, 64))
+    else if (!gGfx3DEnabled && is_inside_box(touch_x, touch_y, MENU_AA_X, MENU_TOP_Y,
+                                             MENU_BUTTON_SIZE, MENU_BUTTON_SIZE))
     {
         // cannot use AA in 400px mode
         if (gfx_config.useWide)
         {
             gfx_config.useAA = !gfx_config.useAA;
+            gfx_3ds_menu_save_video_config();
             return CONFIG_CHANGED;
         }
         
         return DO_NOTHING;
     }
     // 400px vs 800px
-    else if (!gGfx3DEnabled && is_inside_box(touch_x, touch_y, 86, 32, 64, 64))
+    else if (!gGfx3DEnabled && is_inside_box(touch_x, touch_y, MENU_MODE_X, MENU_TOP_Y,
+                                             MENU_BUTTON_SIZE, MENU_BUTTON_SIZE))
     {
         gfx_config.useWide = !gfx_config.useWide;
 
         // disable AA if 400px
         if (!gfx_config.useWide && gfx_config.useAA)
             gfx_config.useAA = false;
+        gfx_3ds_menu_save_video_config();
         
         return CONFIG_CHANGED;
     }
     // toggle debug controls
-    else if (is_inside_box(touch_x, touch_y, 161, 32, 64, 64))
+    else if (is_inside_box(touch_x, touch_y, MENU_DEBUG_X, MENU_TOP_Y,
+                           MENU_BUTTON_SIZE, MENU_BUTTON_SIZE))
     {
         death_ragdoll_debug_set_enabled(!death_ragdoll_debug_is_enabled());
         return CONFIG_CHANGED;
     }
     // hide menu
-    else if (is_inside_box(touch_x, touch_y, 11, 144, 64, 64))
+    else if (is_inside_box(touch_x, touch_y, MENU_RESUME_X, MENU_BOTTOM_Y,
+                           MENU_BUTTON_SIZE, MENU_BUTTON_SIZE))
     {
         return EXIT_MENU;
     }
     // exit to loader
-    else if (is_inside_box(touch_x, touch_y, 86, 144, 64, 64))
+    else if (is_inside_box(touch_x, touch_y, MENU_EXIT_X, MENU_BOTTOM_Y,
+                           MENU_BUTTON_SIZE, MENU_BUTTON_SIZE))
     {
         gShouldRun = false;
     }
@@ -156,6 +186,10 @@ menu_action gfx_3ds_menu_on_touch(int touch_x, int touch_y)
 
 void gfx_3ds_menu_init()
 {
+    gfx_config.useAA = config3dsAntiAliasing != 0;
+    gfx_config.useWide = config3dsWideMode != 0;
+    death_ragdoll_debug_set_enabled(false);
+
     // load all the textures
     load_t3x_texture(&mode_400_tex, NULL, mode_400_t3x, mode_400_t3x_size);
     C3D_TexSetFilter(&mode_400_tex, GPU_LINEAR, GPU_NEAREST);
