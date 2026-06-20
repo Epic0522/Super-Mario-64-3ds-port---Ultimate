@@ -189,6 +189,10 @@ bool gfx_3ds_config_menu_can_open(void)
         return false;
     if (gWarpTransition.isActive || gWarpTransition.pauseRendering)
         return false;
+#ifdef TARGET_N3DS
+    if (gN3dsBottomTransitionActive && gN3dsBottomTransitionDelay <= 0)
+        return false;
+#endif
     if (seqArgs != 0xFFFF && seqId == SEQ_MENU_FILE_SELECT)
         return false;
 

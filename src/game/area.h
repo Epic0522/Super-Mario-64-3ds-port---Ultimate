@@ -123,6 +123,17 @@ extern struct SpawnInfo gPlayerSpawnInfos[];
 extern struct GraphNode *D_8033A160[];
 extern struct Area gAreaData[];
 extern struct WarpTransition gWarpTransition;
+extern s16 gWarpTransDelay;
+#ifdef TARGET_N3DS
+extern u8 gN3dsBottomTransitionActive;
+extern u8 gN3dsBottomTransitionType;
+extern u8 gN3dsBottomTransitionTime;
+extern u8 gN3dsBottomTransitionFrame;
+extern u8 gN3dsBottomTransitionRed;
+extern u8 gN3dsBottomTransitionGreen;
+extern u8 gN3dsBottomTransitionBlue;
+extern s16 gN3dsBottomTransitionDelay;
+#endif
 extern s16 gCurrCourseNum;
 extern s16 gCurrActNum;
 extern s16 gCurrAreaIndex;

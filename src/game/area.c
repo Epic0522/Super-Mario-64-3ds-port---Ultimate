@@ -48,6 +48,16 @@ u32 gWarpTransFBSetColor = 0;
 u8 gWarpTransRed = 0;
 u8 gWarpTransGreen = 0;
 u8 gWarpTransBlue = 0;
+#ifdef TARGET_N3DS
+u8 gN3dsBottomTransitionActive = FALSE;
+u8 gN3dsBottomTransitionType = 0;
+u8 gN3dsBottomTransitionTime = 0;
+u8 gN3dsBottomTransitionFrame = 0;
+u8 gN3dsBottomTransitionRed = 0;
+u8 gN3dsBottomTransitionGreen = 0;
+u8 gN3dsBottomTransitionBlue = 0;
+s16 gN3dsBottomTransitionDelay = 0;
+#endif
 s16 gCurrSaveFileNum = 1;
 s16 gCurrLevelNum = LEVEL_MIN;
 
@@ -184,6 +194,13 @@ void clear_areas(void) {
     gCurrentArea = NULL;
     gWarpTransition.isActive = FALSE;
     gWarpTransition.pauseRendering = FALSE;
+#ifdef TARGET_N3DS
+    /*
+     * Keep the bottom transition held through area teardown. This runs exactly
+     * when the top-screen iris has closed, before the destination map is ready.
+     */
+    gN3dsBottomTransitionDelay = 0;
+#endif
     gMarioSpawnInfo->areaIndex = -1;
 
     for (i = 0; i < 8; i++) {
@@ -353,6 +370,17 @@ void play_transition(s16 transType, s16 time, u8 red, u8 green, u8 blue) {
             gWarpTransition.data.endTexRadius = GFX_DIMENSIONS_FULL_RADIUS;
         }
     }
+
+#ifdef TARGET_N3DS
+    gN3dsBottomTransitionActive = TRUE;
+    gN3dsBottomTransitionType = transType;
+    gN3dsBottomTransitionTime = time;
+    gN3dsBottomTransitionFrame = 0;
+    gN3dsBottomTransitionRed = gWarpTransition.data.red;
+    gN3dsBottomTransitionGreen = gWarpTransition.data.green;
+    gN3dsBottomTransitionBlue = gWarpTransition.data.blue;
+    gN3dsBottomTransitionDelay = gWarpTransDelay;
+#endif
 }
 
 /*

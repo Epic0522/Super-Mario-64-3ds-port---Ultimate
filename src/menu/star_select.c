@@ -56,6 +56,10 @@ static s8 sSelectableStarIndex = 0;
 // Act Selector menu timer that keeps counting until you choose an act.
 static s32 sActSelectorMenuTimer = 0;
 
+#ifdef TARGET_N3DS
+s8 gN3dsStarSelectActive = FALSE;
+#endif
+
 /**
  * Act Selector Star Type Loop Action
  * Defines a select type for a star in the act selector.
@@ -402,6 +406,9 @@ Gfx *geo_act_selector_strings(s16 callContext, UNUSED struct GraphNode *node) {
 s32 lvl_init_act_selector_values_and_stars(UNUSED s32 arg, UNUSED s32 unused) {
     u8 stars = save_file_get_star_flags(gCurrSaveFileNum - 1, gCurrCourseNum - 1);
 
+#ifdef TARGET_N3DS
+    gN3dsStarSelectActive = TRUE;
+#endif
     sLoadedActNum = 0;
     sInitSelectedActNum = 0;
     sVisibleStars = 0;
@@ -450,6 +457,11 @@ s32 lvl_update_obj_and_load_act_button_actions(UNUSED s32 arg, UNUSED s32 unused
             gDialogCourseActNum = sSelectedActIndex + 1;
         }
     }
+
+#ifdef TARGET_N3DS
+    if (sLoadedActNum != 0)
+        gN3dsStarSelectActive = FALSE;
+#endif
 
     area_update_objects();
     sActSelectorMenuTimer++;
