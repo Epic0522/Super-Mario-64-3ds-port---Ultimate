@@ -8,6 +8,13 @@
 #include "gfx_3ds_menu.h"
 #include "gfx_citro3d.h"
 
+#include "audio/external.h"
+#include "game/area.h"
+#include "level_table.h"
+#include "menu/level_select_menu.h"
+#include "pc/configfile.h"
+#include "seq_ids.h"
+
 #include "src/pc/audio/audio_3ds_threading.h"
 #include "src/pc/audio/audio_3ds.h"
 #include "src/pc/profiler_3ds.h"
@@ -162,9 +169,8 @@ static void gfx_3ds_update_stereoscopy(void)
         gGfx3DEnabled = true;
 	} else
     {
-        // default to true; this is different to initialisation where both are false
-		gfx_config.useAA = true;
-		gfx_config.useWide = true;
+		gfx_config.useAA = config3dsAntiAliasing != 0;
+		gfx_config.useWide = config3dsWideMode != 0;
         gGfx3DEnabled = false;
 	}
 
@@ -172,6 +178,21 @@ static void gfx_3ds_update_stereoscopy(void)
 
 	deinitialise_screens();
     initialise_screens();
+}
+
+bool gfx_3ds_config_menu_can_open(void)
+{
+    u16 seqArgs = get_current_background_music();
+    u8 seqId = seqArgs & 0x7F;
+
+    if (gN3dsIntroScreenMode >= 0)
+        return false;
+    if (gWarpTransition.isActive || gWarpTransition.pauseRendering)
+        return false;
+    if (seqArgs != 0xFFFF && seqId == SEQ_MENU_FILE_SELECT)
+        return false;
+
+    return gCurrLevelNum >= LEVEL_MIN && gCurrLevelNum <= LEVEL_MAX;
 }
 
 static void gfx_3ds_handle_touch() {
@@ -182,7 +203,13 @@ static void gfx_3ds_handle_touch() {
     if (debounce > 0)
         debounce--;
 
-    if (debounce == 0 && (pos.px || pos.py) && (pos.px < 160))
+    if (!gfx_3ds_config_menu_can_open() && gShowConfigMenu)
+    {
+        gShowConfigMenu = false;
+        gBottomScreenNeedsRender = true;
+    }
+
+    if (debounce == 0 && (pos.px || pos.py) && (gShowConfigMenu || gfx_3ds_config_menu_can_open()))
     {
         debounce = DEBOUNCE_FRAMES; // wait quarter second between mashing
         menu_action res = gfx_3ds_menu_on_touch(pos.px, pos.py);
