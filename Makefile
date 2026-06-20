@@ -156,6 +156,11 @@ endif
 GRUCODE_CFLAGS := -D$(GRUCODE_DEF)
 GRUCODE_ASFLAGS := $(GRUCODE_ASFLAGS) --defsym $(GRUCODE_DEF)=1
 
+ifeq ($(TARGET_N3DS),1)
+  N3DS_TARGET_SUFFIX ?= aev64u6
+  TARGET := sm64.$(VERSION).$(N3DS_TARGET_SUFFIX)
+endif
+
 ifeq ($(NON_MATCHING),1)
   MATCH_CFLAGS := -DNON_MATCHING -DAVOID_UB
   MATCH_ASFLAGS := --defsym AVOID_UB=1
@@ -923,9 +928,13 @@ $(BUILD_DIR)/src/pc/gfx/shadow.shbin.o : src/pc/gfx/shadow.v.pica
 	$(DEVKITPRO)/tools/bin/bin2s $(BUILD_DIR)/src/pc/gfx/shadow.shbin | $(AS) -o $@
 
 SMDH_TITLE ?= Super Mario 64
-SMDH_DESCRIPTION ?= Super Mario 64 3DS Port
+SMDH_DESCRIPTION ?= Super Mario 64 3DS Port Ultimate
 SMDH_AUTHOR ?= SM64 Port Team
+SMDH_FLAGS ?= visible,allow3d,recordusage,extendedbanner
 SMDH_ICON := 3ds/icon.smdh
+CIA_ICON := 3ds/icon.icn
+CIA_BANNER := 3ds/banner.bnr
+BANNERTOOL ?= $(or $(shell command -v bannertool 2>/dev/null),$(wildcard /tmp/3ds-bannertool/build/bannertool),bannertool)
 
 $(ELF): $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(BUILD_DIR)/src/pc/gfx/shader.shbin.o $(BUILD_DIR)/src/pc/gfx/shadow.shbin.o $(MINIMAP_O) $(SMDH_ICON)
 	$(LD) -L $(BUILD_DIR) -o $@ $(O_FILES) $(BUILD_DIR)/src/pc/gfx/shader.shbin.o $(BUILD_DIR)/src/pc/gfx/shadow.shbin.o $(MINIMAP_O) $(MINIMAP_T3X_O) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(LDFLAGS)
@@ -933,9 +942,9 @@ $(ELF): $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(
 $(EXE): $(ELF)
 	3dsxtool $< $@ --smdh=$(BUILD_DIR)/$(SMDH_ICON)
 
-$(CIA): $(ELF)
+$(CIA): $(ELF) $(CIA_ICON) $(CIA_BANNER)
 	@echo "Generating $@, please wait..."
-	makerom -f cia -o "$@" -rsf 3ds/template.rsf -target t -elf "$<" -icon 3ds/icon.icn -banner 3ds/banner.bnr
+	makerom -f cia -o "$@" -rsf 3ds/template.rsf -target t -elf "$<" -icon $(CIA_ICON) -banner $(CIA_BANNER)
 
 # stolen from /opt/devkitpro/devkitARM/base_tools
 define bin2o
@@ -966,7 +975,13 @@ $(BUILD_DIR)/$(MINIMAP_TEXTURES)/arrow.png: textures/segment2/segment2.081D0.rgb
 	cp $< $@
 
 %.smdh: %.png
-	smdhtool --create "$(SMDH_TITLE)" "$(SMDH_DESCRIPTION)" "$(SMDH_AUTHOR)" $< $(BUILD_DIR)/$@
+	$(BANNERTOOL) makesmdh -s "$(SMDH_TITLE)" -l "$(SMDH_DESCRIPTION)" -p "$(SMDH_AUTHOR)" -f "$(SMDH_FLAGS)" -i $< -o $(BUILD_DIR)/$@
+
+$(CIA_ICON): 3ds/icon.png
+	$(BANNERTOOL) makesmdh -s "$(SMDH_TITLE)" -l "$(SMDH_DESCRIPTION)" -p "$(SMDH_AUTHOR)" -f "$(SMDH_FLAGS)" -i $< -o $@
+
+$(CIA_BANNER): 3ds/banner.png 3ds/audio.wav
+	$(BANNERTOOL) makebanner -i 3ds/banner.png -a 3ds/audio.wav -o $@
 
 else
 $(EXE): $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES)

@@ -10,7 +10,6 @@
 
 #include "audio/external.h"
 #include "game/area.h"
-#include "level_table.h"
 #include "menu/level_select_menu.h"
 #include "pc/configfile.h"
 #include "seq_ids.h"

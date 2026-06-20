@@ -1,6 +1,6 @@
 BasicInfo:
   Title                   : Super Mario 64
-  ProductCode             : CTR-P-SM64
+  ProductCode             : CTR-P-S64U
   Logo                    : Nintendo # Nintendo / Licensed / Distributed / iQue / iQueForSystem
 
 #RomFs:
@@ -9,7 +9,7 @@ BasicInfo:
 
 TitleInfo:
   Category                : Application
-  UniqueId                : 0xff3ff
+  UniqueId                : 0xae564
 
 Option:
   UseOnSD                 : true # true if App is to be installed to SD

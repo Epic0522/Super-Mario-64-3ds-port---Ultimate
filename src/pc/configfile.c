@@ -81,6 +81,8 @@ unsigned int config3dsAntiAliasing = 1;
 unsigned int config3dsWideMode = 1;
 #endif
 
+
+
 static const struct ConfigOption options[] = {
     {.name = "fullscreen",     .type = CONFIG_TYPE_BOOL, .boolValue = &configFullscreen},
     {.name = "key_a",          .type = CONFIG_TYPE_UINT, .uintValue = &configKeyA},
