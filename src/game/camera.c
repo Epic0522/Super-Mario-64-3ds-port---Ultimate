@@ -782,6 +782,7 @@ static u8 newcam_official_control_locked(struct Camera *c) {
 
 static void newcam_force_official_mode(struct Camera *c, s16 mode, u8 snapBehindMario) {
     newcam_active = 0;
+    newcam_xlu = 255;
     newcam_reset_player_offset();
     newcam_set_official_hint(NEWCAM_HINT_NONE, c->pos, c->focus);
 
@@ -3179,6 +3180,7 @@ void update_camera(struct Camera *c) {
         c->defMode = c->mode;
         gLakituState.mode = c->mode;
         gLakituState.defMode = c->defMode;
+        newcam_xlu = 255;
         newcam_set_official_hint(NEWCAM_HINT_NONE, c->pos, c->focus);
         sync_lakitu_state_to_camera(c);
     }
@@ -3189,6 +3191,9 @@ void update_camera(struct Camera *c) {
         play_sound(SOUND_MENU_CHANGE_SELECT, gDefaultSoundArgs);
 
         if (newcam_active) {
+            if (c->mode != CAM_MODE_NEWCAM) {
+                sModeInfo.lastMode = c->mode;
+            }
             c->mode = CAM_MODE_NEWCAM;
             c->defMode = CAM_MODE_NEWCAM;
             gLakituState.mode = CAM_MODE_NEWCAM;
@@ -3197,15 +3202,21 @@ void update_camera(struct Camera *c) {
             newcam_reset_after_cutscene(c);
             skip_camera_interpolation();
         } else {
+            s16 officialMode = sModeInfo.lastMode == CAM_MODE_NEWCAM
+                ? CAMERA_MODE_CLOSE : sModeInfo.lastMode;
+
+            if (officialMode == CAMERA_MODE_NONE) {
+                officialMode = CAMERA_MODE_CLOSE;
+            }
+            newcam_xlu = 255;
             set_cam_angle(CAM_ANGLE_LAKITU);
-            c->mode = CAMERA_MODE_CLOSE;
-            c->defMode = c->mode;
-            gLakituState.mode = c->mode;
-            gLakituState.defMode = c->defMode;
-            cameraSnapBehindMario = TRUE;
+            c->mode = CAM_MODE_NEWCAM;
+            c->defMode = officialMode;
+            gLakituState.mode = officialMode;
+            gLakituState.defMode = officialMode;
             sCButtonsPressed = 0;
             newcam_set_official_hint(NEWCAM_HINT_NONE, c->pos, c->focus);
-            sync_lakitu_state_to_camera(c);
+            set_camera_mode(c, officialMode, 1);
         }
     }
 

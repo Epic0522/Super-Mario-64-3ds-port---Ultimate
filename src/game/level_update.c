@@ -23,8 +23,10 @@
 #include "debug_course.h"
 #ifdef TARGET_N3DS
 #include "menu/level_select_menu.h"
+#include "ingame_menu.h"
 #include "print.h"
 #include "src/pc/controller/controller_3ds.h"
+#include "src/minimap/minimap.h"
 #endif
 #ifdef VERSION_EU
 #include "memory.h"
@@ -69,8 +71,8 @@ struct N3dsRuntimeLevelSelectEntry {
 };
 
 static const struct N3dsRuntimeLevelSelectEntry sN3dsRuntimeLevelSelectEntries[] = {
-    { LEVEL_CASTLE_GROUNDS, 1, 0x03, "CASTLE OUT" },
-    { LEVEL_CASTLE, 1, 0x01, "CASTLE IN" },
+    { LEVEL_CASTLE_GROUNDS, 1, 0x03, "CG" },
+    { LEVEL_CASTLE, 1, 0x01, "CA" },
     { LEVEL_BOB, 1, 0x0A, "BOB" },
     { LEVEL_WF, 1, 0x0A, "WF" },
     { LEVEL_JRB, 1, 0x0A, "JRB" },
@@ -86,19 +88,19 @@ static const struct N3dsRuntimeLevelSelectEntry sN3dsRuntimeLevelSelectEntries[]
     { LEVEL_THI, 1, 0x0A, "THI" },
     { LEVEL_TTC, 1, 0x0A, "TTC" },
     { LEVEL_RR, 1, 0x0A, "RR" },
-    { LEVEL_CASTLE_COURTYARD, 1, 0x0A, "COURTYARD" },
+    { LEVEL_CASTLE_COURTYARD, 1, 0x0A, "CY" },
     { LEVEL_PSS, 1, 0x0A, "PSS" },
     { LEVEL_COTMC, 1, 0x0A, "COTMC" },
     { LEVEL_TOTWC, 1, 0x0A, "TOTWC" },
     { LEVEL_VCUTM, 1, 0x0A, "VCUTM" },
-    { LEVEL_SA, 1, 0x0A, "AQUARIUM" },
+    { LEVEL_SA, 1, 0x0A, "SA" },
     { LEVEL_WMOTR, 1, 0x0A, "WMOTR" },
     { LEVEL_BITDW, 1, 0x0A, "BITDW" },
     { LEVEL_BITFS, 1, 0x0A, "BITFS" },
     { LEVEL_BITS, 1, 0x0A, "BITS" },
-    { LEVEL_BOWSER_1, 1, 0x0A, "BOWSER 1" },
-    { LEVEL_BOWSER_2, 1, 0x0A, "BOWSER 2" },
-    { LEVEL_BOWSER_3, 1, 0x0A, "BOWSER 3" },
+    { LEVEL_BOWSER_1, 1, 0x0A, "B1" },
+    { LEVEL_BOWSER_2, 1, 0x0A, "B2" },
+    { LEVEL_BOWSER_3, 1, 0x0A, "B3" },
 };
 
 #define N3DS_RUNTIME_LEVEL_SELECT_COUNT \
@@ -146,6 +148,25 @@ static void n3ds_runtime_level_select_consume_input(void) {
     gPlayer3Controller->buttonDown = 0;
 }
 
+static void n3ds_runtime_level_select_set_preview(u8 active) {
+    const struct N3dsRuntimeLevelSelectEntry *entry;
+
+    if (!active) {
+        minimap_set_level_select_preview(false, 0, 1);
+        return;
+    }
+
+    entry = &sN3dsRuntimeLevelSelectEntries[sN3dsRuntimeLevelSelectIndex];
+    minimap_set_level_select_preview(true, entry->level, entry->area);
+}
+
+static void n3ds_runtime_level_select_close(void) {
+    sN3dsRuntimeLevelSelectActive = FALSE;
+    sN3dsRuntimeLevelSelectRepeatTimer = 0;
+    sN3dsRuntimeLevelSelectStickLatch = FALSE;
+    n3ds_runtime_level_select_set_preview(FALSE);
+}
+
 static s32 n3ds_runtime_level_select_update(void) {
     s16 stickStep = 0;
     const struct N3dsRuntimeLevelSelectEntry *entry;
@@ -159,18 +180,14 @@ static s32 n3ds_runtime_level_select_update(void) {
     }
 
     if (gPlayer1Controller->buttonPressed & (B_BUTTON | START_BUTTON)) {
-        sN3dsRuntimeLevelSelectActive = FALSE;
-        sN3dsRuntimeLevelSelectRepeatTimer = 0;
-        sN3dsRuntimeLevelSelectStickLatch = FALSE;
+        n3ds_runtime_level_select_close();
         play_sound(SOUND_MENU_CLICK_FILE_SELECT, gDefaultSoundArgs);
         return TRUE;
     }
 
     if (gPlayer1Controller->buttonPressed & (A_BUTTON | Z_TRIG)) {
         entry = &sN3dsRuntimeLevelSelectEntries[sN3dsRuntimeLevelSelectIndex];
-        sN3dsRuntimeLevelSelectActive = FALSE;
-        sN3dsRuntimeLevelSelectRepeatTimer = 0;
-        sN3dsRuntimeLevelSelectStickLatch = FALSE;
+        n3ds_runtime_level_select_close();
         if (entry->level == gCurrLevelNum) {
             play_sound(SOUND_MENU_CLICK_FILE_SELECT, gDefaultSoundArgs);
             return TRUE;
@@ -221,11 +238,8 @@ static s32 n3ds_runtime_level_select_update(void) {
         sN3dsRuntimeLevelSelectRepeatTimer = 8;
     }
 
-    entry = &sN3dsRuntimeLevelSelectEntries[sN3dsRuntimeLevelSelectIndex];
-    // Keep the runtime selector on numeric HUD text only. The normal menu string
-    // path can collide with pause/dialog rendering on 3DS when opened in-level.
-    print_text_fmt_int(42, 92, "%2d", sN3dsRuntimeLevelSelectIndex + 1);
-    print_text(92, 92, entry->name);
+    n3ds_runtime_level_select_set_preview(TRUE);
+    print_text_fmt_int(42, 92, "%02d", sN3dsRuntimeLevelSelectIndex + 1);
     return TRUE;
 }
 #endif
@@ -1167,6 +1181,7 @@ s32 play_mode_normal(void) {
         sN3dsRuntimeLevelSelectActive = TRUE;
         sN3dsRuntimeLevelSelectRepeatTimer = 0;
         sN3dsRuntimeLevelSelectStickLatch = TRUE;
+        n3ds_runtime_level_select_set_preview(TRUE);
         n3ds_runtime_level_select_consume_input();
         play_sound(SOUND_MENU_CLICK_FILE_SELECT, gDefaultSoundArgs);
         return 0;

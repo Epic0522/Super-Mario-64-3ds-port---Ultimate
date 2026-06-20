@@ -2681,7 +2681,6 @@ s16 render_pause_courses_and_castle(void) {
         case DIALOG_STATE_VERTICAL:
             shade_screen();
             render_pause_my_score_coins();
-            render_pause_red_coins();
 
             if (gMarioStates[0].action & ACT_FLAG_PAUSE_EXIT) {
                 render_pause_course_options(99, 93, &gDialogLineNum, 15);

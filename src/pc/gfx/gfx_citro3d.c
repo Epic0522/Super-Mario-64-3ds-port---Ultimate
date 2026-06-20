@@ -1288,6 +1288,10 @@ static void gfx_citro3d_end_frame(void)
      */
     gfx_citro3d_begin_bottom_screen_pass();
     uint32_t tris = gfx_3ds_draw_minimap(sBottomVboBuffer, 0);
+    if (gShowConfigMenu && !gfx_3ds_config_menu_can_open()) {
+        gShowConfigMenu = false;
+        gBottomScreenNeedsRender = true;
+    }
     if (gShowConfigMenu)
         tris += gfx_3ds_menu_draw(sBottomVboBuffer, tris, true);
 
