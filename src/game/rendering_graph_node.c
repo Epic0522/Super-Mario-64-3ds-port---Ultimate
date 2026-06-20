@@ -28,6 +28,7 @@
 #include "src/pc/gfx/gfx_citro3d.h"
 #include "src/pc/gfx/color_conversion.h"
 #include "enhancements/dynamic_shadows.h"
+#include "enhancements/death_ragdoll.h"
 #endif
 
 /**
@@ -1291,7 +1292,7 @@ static void geo_process_generated_list(struct GraphNodeGenerated *node) {
                                      (struct AllocOnlyPool *) gMatStack[gMatStackIndex]);
 
 #ifdef TARGET_N3DS
-        if (sAppendingDynamicShadow) {
+        if (sAppendingDynamicShadow && node->fnNode.func != (GraphNodeFunc) death_ragdoll_geo_render) {
             list = NULL;
         }
 #endif

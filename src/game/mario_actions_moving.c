@@ -12,6 +12,7 @@
 #include "memory.h"
 #include "behavior_data.h"
 #include "thread6.h"
+#include "enhancements/death_ragdoll.h"
 
 struct LandingAction {
     s16 numFrames;
@@ -42,6 +43,14 @@ struct LandingAction sHoldJumpLandAction = {
 struct LandingAction sHoldFreefallLandAction = {
     4, 5, ACT_HOLD_FREEFALL, ACT_HOLD_FREEFALL_LAND_STOP, ACT_HOLD_JUMP, ACT_HOLD_FREEFALL, ACT_HOLD_BEGIN_SLIDING,
 };
+
+static void play_mario_object_sound_safe(struct MarioState *m, s32 soundBits) {
+    if (m->marioObj != NULL) {
+        play_sound(soundBits, m->marioObj->header.gfx.cameraToObject);
+    } else {
+        play_sound(soundBits, gDefaultSoundArgs);
+    }
+}
 
 struct LandingAction sLongJumpLandAction = {
     6, 5, ACT_FREEFALL, ACT_LONG_JUMP_LAND_STOP, ACT_LONG_JUMP, ACT_FREEFALL, ACT_BEGIN_SLIDING,
@@ -1710,7 +1719,7 @@ s32 act_death_exit_land(struct MarioState *m) {
     val04 = set_mario_animation(m, MARIO_ANIM_FALL_OVER_BACKWARDS);
 
     if (val04 == 0x36) {
-        play_sound(SOUND_MARIO_MAMA_MIA, m->marioObj->header.gfx.cameraToObject);
+        play_mario_object_sound_safe(m, SOUND_MARIO_MAMA_MIA);
     }
     if (val04 == 0x44) {
         play_mario_landing_sound(m, SOUND_ACTION_TERRAIN_LANDING);
@@ -1855,6 +1864,22 @@ s32 act_long_jump_land(struct MarioState *m) {
         m->forwardVel = 0.0f;
     }
 #endif
+
+    if (death_ragdoll_debug_blj_is_active()) {
+        m->input |= INPUT_Z_DOWN;
+        return set_mario_action(m, ACT_LONG_JUMP, 0);
+    }
+
+    if (death_ragdoll_debug_blj_is_coasting() && m->forwardVel < -1.0f) {
+        apply_landing_accel(m, 0.992f);
+        mario_set_forward_vel(m, m->forwardVel);
+        if (perform_ground_step(m) == GROUND_STEP_LEFT_GROUND) {
+            return set_mario_action(m, ACT_LONG_JUMP, 0);
+        }
+        set_mario_animation(m, !m->marioObj->oMarioLongJumpIsSlow ? MARIO_ANIM_CROUCH_FROM_FAST_LONGJUMP
+                                                                   : MARIO_ANIM_CROUCH_FROM_SLOW_LONGJUMP);
+        return FALSE;
+    }
 
     if (!(m->input & INPUT_Z_DOWN)) {
         m->input &= ~INPUT_A_PRESSED;

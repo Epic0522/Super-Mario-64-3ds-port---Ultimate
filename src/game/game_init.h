@@ -65,6 +65,9 @@ extern u8 gDemoInputs[];
 
 extern u16 frameBufferIndex;
 extern u32 gGlobalTimer;
+#ifdef TARGET_N3DS
+extern u32 gN3DSRenderedFrameCounter;
+#endif
 
 void setup_game_memory(void);
 void thread5_game_loop(UNUSED void *arg);

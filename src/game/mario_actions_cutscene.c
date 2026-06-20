@@ -28,6 +28,7 @@
 #include "seq_ids.h"
 #include "sound_init.h"
 #include "thread6.h"
+#include "enhancements/death_ragdoll.h"
 
 // TODO: put this elsewhere
 enum SaveOption { SAVE_OPT_SAVE_AND_CONTINUE = 1, SAVE_OPT_SAVE_AND_QUIT, SAVE_OPT_CONTINUE_DONT_SAVE };
@@ -50,6 +51,16 @@ static s8 D_8032CBE8 = 0;
 static s8 D_8032CBEC[7] = { 2, 3, 2, 1, 2, 3, 2 };
 
 static u8 sStarsNeededForDialog[6] = { 1, 3, 8, 30, 50, 70 };
+
+#include "enhancements/death_ragdoll.inc.c"
+
+static void play_mario_object_sound_safe(struct MarioState *m, s32 soundBits) {
+    if (m->marioObj != NULL) {
+        play_sound(soundBits, m->marioObj->header.gfx.cameraToObject);
+    } else {
+        play_sound(soundBits, gDefaultSoundArgs);
+    }
+}
 
 /**
  * Data for the jumbo star cutscene. It specifies the flight path after triple
@@ -1166,9 +1177,9 @@ s32 act_death_exit(struct MarioState *m) {
     if (15 < m->actionTimer++
         && launch_mario_until_land(m, ACT_DEATH_EXIT_LAND, MARIO_ANIM_GENERAL_FALL, -32.0f)) {
 #ifdef VERSION_JP
-        play_sound(SOUND_MARIO_OOOF, m->marioObj->header.gfx.cameraToObject);
+        play_mario_object_sound_safe(m, SOUND_MARIO_OOOF);
 #else
-        play_sound(SOUND_MARIO_OOOF2, m->marioObj->header.gfx.cameraToObject);
+        play_mario_object_sound_safe(m, SOUND_MARIO_OOOF2);
 #endif
 #ifdef VERSION_SH
         queue_rumble_data(5, 80);
@@ -1185,9 +1196,9 @@ s32 act_death_exit(struct MarioState *m) {
 s32 act_unused_death_exit(struct MarioState *m) {
     if (launch_mario_until_land(m, ACT_FREEFALL_LAND_STOP, MARIO_ANIM_GENERAL_FALL, 0.0f)) {
 #ifdef VERSION_JP
-        play_sound(SOUND_MARIO_OOOF, m->marioObj->header.gfx.cameraToObject);
+        play_mario_object_sound_safe(m, SOUND_MARIO_OOOF);
 #else
-        play_sound(SOUND_MARIO_OOOF2, m->marioObj->header.gfx.cameraToObject);
+        play_mario_object_sound_safe(m, SOUND_MARIO_OOOF2);
 #endif
         m->numLives--;
         // restore 7.75 units of health
@@ -1201,9 +1212,9 @@ s32 act_unused_death_exit(struct MarioState *m) {
 s32 act_falling_death_exit(struct MarioState *m) {
     if (launch_mario_until_land(m, ACT_DEATH_EXIT_LAND, MARIO_ANIM_GENERAL_FALL, 0.0f)) {
 #ifdef VERSION_JP
-        play_sound(SOUND_MARIO_OOOF, m->marioObj->header.gfx.cameraToObject);
+        play_mario_object_sound_safe(m, SOUND_MARIO_OOOF);
 #else
-        play_sound(SOUND_MARIO_OOOF2, m->marioObj->header.gfx.cameraToObject);
+        play_mario_object_sound_safe(m, SOUND_MARIO_OOOF2);
 #endif
 #ifdef VERSION_SH
         queue_rumble_data(5, 80);
@@ -1247,7 +1258,9 @@ s32 act_special_death_exit(struct MarioState *m) {
     struct Object *marioObj = m->marioObj;
 
     if (m->actionTimer++ < 11) {
-        marioObj->header.gfx.node.flags &= ~GRAPH_RENDER_ACTIVE;
+        if (marioObj != NULL) {
+            marioObj->header.gfx.node.flags &= ~GRAPH_RENDER_ACTIVE;
+        }
         return FALSE;
     }
 
@@ -1259,7 +1272,9 @@ s32 act_special_death_exit(struct MarioState *m) {
         m->healCounter = 31;
     }
     // show Mario
-    marioObj->header.gfx.node.flags |= GRAPH_RENDER_ACTIVE;
+    if (marioObj != NULL) {
+        marioObj->header.gfx.node.flags |= GRAPH_RENDER_ACTIVE;
+    }
     // one unit of health
     m->health = 0x0100;
 
@@ -1542,14 +1557,17 @@ s32 act_squished(struct MarioState *m) {
                 // 1 unit of health
                 if (m->health < 0x0100) {
                     level_trigger_warp(m, WARP_OP_DEATH);
-                    // woosh, he's gone!
-                    set_mario_action(m, ACT_DISAPPEARED, 0);
+                    m->actionState = 3;
+                    m->actionTimer = 0;
                 } else if (m->hurtCounter == 0) {
                     // un-squish animation
                     m->squishTimer = 30;
                     set_mario_action(m, ACT_IDLE, 0);
                 }
             }
+            break;
+        case 3:
+            m->actionTimer++;
             break;
     }
 
@@ -1584,8 +1602,8 @@ s32 act_squished(struct MarioState *m) {
         m->health = 0x00FF;
         m->hurtCounter = 0;
         level_trigger_warp(m, WARP_OP_DEATH);
-        // woosh, he's gone!
-        set_mario_action(m, ACT_DISAPPEARED, 0);
+        m->actionState = 3;
+        m->actionTimer = 0;
     }
     stop_and_set_height_to_floor(m);
     set_mario_animation(m, MARIO_ANIM_A_POSE);
@@ -2665,6 +2683,7 @@ s32 mario_execute_cutscene_action(struct MarioState *m) {
         case ACT_SUFFOCATION:                cancel = act_suffocation(m);                break;
         case ACT_DEATH_ON_STOMACH:           cancel = act_death_on_stomach(m);           break;
         case ACT_DEATH_ON_BACK:              cancel = act_death_on_back(m);              break;
+        case ACT_DEATH_RAGDOLL:              cancel = act_death_ragdoll(m);              break;
         case ACT_EATEN_BY_BUBBA:             cancel = act_eaten_by_bubba(m);             break;
         case ACT_END_PEACH_CUTSCENE:         cancel = act_end_peach_cutscene(m);         break;
         case ACT_CREDITS_CUTSCENE:           cancel = act_credits_cutscene(m);           break;

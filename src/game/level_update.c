@@ -18,6 +18,7 @@
 #include "object_list_processor.h"
 #include "ingame_menu.h"
 #include "obj_behaviors.h"
+#include "enhancements/death_ragdoll.h"
 #include "save_file.h"
 #include "debug_course.h"
 #ifdef TARGET_N3DS
@@ -480,6 +481,30 @@ void set_mario_initial_cap_powerup(struct MarioState *m) {
 }
 
 void set_mario_initial_action(struct MarioState *m, u32 spawnType, u32 actionArg) {
+    if (death_ragdoll_consume_death_warp_spawn()) {
+        switch (spawnType) {
+            case MARIO_SPAWN_DEATH:
+                set_mario_action(m, ACT_FALLING_DEATH_EXIT, 0);
+                set_mario_initial_cap_powerup(m);
+                return;
+
+            case MARIO_SPAWN_PAINTING_DEATH:
+                set_mario_action(m, ACT_DEATH_EXIT, 0);
+                set_mario_initial_cap_powerup(m);
+                return;
+
+            case MARIO_SPAWN_AIRBORNE_DEATH:
+                set_mario_action(m, ACT_UNUSED_DEATH_EXIT, 0);
+                set_mario_initial_cap_powerup(m);
+                return;
+
+            case MARIO_SPAWN_LAUNCH_DEATH:
+                set_mario_action(m, ACT_SPECIAL_DEATH_EXIT, 0);
+                set_mario_initial_cap_powerup(m);
+                return;
+        }
+    }
+
     switch (spawnType) {
         case MARIO_SPAWN_DOOR_WARP:
             set_mario_action(m, ACT_WARP_DOOR_SPAWN, actionArg);

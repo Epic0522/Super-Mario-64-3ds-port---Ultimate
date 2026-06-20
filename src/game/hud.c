@@ -14,6 +14,7 @@
 #include "save_file.h"
 #include "print.h"
 #include "../../enhancements/puppycam.h"
+#include "enhancements/death_ragdoll.h"
 
 /* @file hud.c
  * This file implements HUD rendering and power meter animations.
@@ -65,6 +66,42 @@ static struct CameraHUD sCameraHUD = { CAM_STATUS_NONE };
 static u32 sPowerMeterLastRenderTimestamp;
 static s16 sPowerMeterLastY;
 static Gfx *sPowerMeterDisplayListPos;
+
+#ifdef TARGET_N3DS
+#define DEATH_RAGDOLL_DEBUG_ARM11_TICKS_PER_SEC (16756991ULL * 2ULL * 4ULL * 2ULL)
+
+extern u64 svcGetSystemTick(void);
+
+static u64 sDeathRagdollDebugFpsTime;
+static u32 sDeathRagdollDebugFpsRenderFrame;
+static s32 sDeathRagdollDebugFps;
+
+static void render_death_ragdoll_debug_status(void) {
+    u64 now = svcGetSystemTick();
+    u64 elapsed;
+    u64 refreshTicks = DEATH_RAGDOLL_DEBUG_ARM11_TICKS_PER_SEC / 2;
+    u32 frameDelta;
+
+    if (sDeathRagdollDebugFpsTime == 0) {
+        sDeathRagdollDebugFpsTime = now;
+        sDeathRagdollDebugFpsRenderFrame = gN3DSRenderedFrameCounter;
+    }
+
+    elapsed = now - sDeathRagdollDebugFpsTime;
+    if (elapsed >= refreshTicks && elapsed > 0) {
+        frameDelta = gN3DSRenderedFrameCounter - sDeathRagdollDebugFpsRenderFrame;
+        sDeathRagdollDebugFps =
+            (s32) (((u64) frameDelta * DEATH_RAGDOLL_DEBUG_ARM11_TICKS_PER_SEC) / elapsed);
+        sDeathRagdollDebugFpsTime = now;
+        sDeathRagdollDebugFpsRenderFrame = gN3DSRenderedFrameCounter;
+    }
+
+    if (gGlobalTimer & 0x08) {
+        print_text(GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(8), 204, "DEBUG");
+    }
+    print_text_fmt_int(GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(8), 188, "FPS %d", sDeathRagdollDebugFps);
+}
+#endif
 
 void patch_interpolated_hud(void) {
     if (sPowerMeterDisplayListPos != NULL) {
@@ -516,6 +553,12 @@ void render_hud(void) {
                 G_MTX_PROJECTION | G_MTX_MUL | G_MTX_NOPUSH);
 #else
         create_dl_ortho_matrix();
+#endif
+
+#ifdef TARGET_N3DS
+        if (death_ragdoll_debug_is_enabled()) {
+            render_death_ragdoll_debug_status();
+        }
 #endif
 
         if (gCurrentArea != NULL && gCurrentArea->camera->mode == CAMERA_MODE_INSIDE_CANNON) {

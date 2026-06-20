@@ -63,6 +63,10 @@ void set_vblank_handler(UNUSED s32 index, UNUSED struct VblankHandler *handler, 
 static uint8_t inited = 0;
 
 #include "game/game_init.h" // for gGlobalTimer
+#ifdef TARGET_N3DS
+u32 gN3DSRenderedFrameCounter = 0;
+#endif
+
 void send_display_list(struct SPTask *spTask) {
     if (!inited) {
         return;
@@ -108,6 +112,9 @@ void produce_one_frame(void) {
     gMtxTblSize = 0;
 #endif
     gfx_start_frame();
+#ifdef TARGET_N3DS
+    gN3DSRenderedFrameCounter++;
+#endif
     game_loop_one_iteration();
 
 #ifndef TARGET_N3DS
@@ -129,6 +136,9 @@ void produce_one_frame(void) {
 #endif
 
     gfx_start_frame();
+#ifdef TARGET_N3DS
+    gN3DSRenderedFrameCounter++;
+#endif
     patch_interpolations();
     send_display_list(gGfxSPTask);
     gfx_end_frame();

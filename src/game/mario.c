@@ -34,6 +34,7 @@
 #include "sound_init.h"
 #include "thread6.h"
 #include "../../enhancements/puppycam.h"
+#include "enhancements/death_ragdoll.h"
 
 u32 unused80339F10;
 s8 filler80339F1C[20];
@@ -1762,6 +1763,9 @@ s32 execute_mario_action(UNUSED struct Object *o) {
         squish_mario_model(gMarioState);
         set_submerged_cam_preset_and_spawn_bubbles(gMarioState);
         update_mario_health(gMarioState);
+        if (!death_ragdoll_debug_update_shortcut(gMarioState)) {
+            death_ragdoll_try_start_from_health_depleted(gMarioState);
+        }
         update_mario_info_for_cam(gMarioState);
         mario_update_hitbox_and_cap_model(gMarioState);
 

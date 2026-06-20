@@ -10,6 +10,8 @@
 #include "src/minimap/textures/mode_800_t3x.h"
 #include "src/minimap/textures/aa_on_t3x.h"
 #include "src/minimap/textures/aa_off_t3x.h"
+#include "src/minimap/textures/debug_on_t3x.h"
+#include "src/minimap/textures/debug_off_t3x.h"
 #include "src/minimap/textures/resume_t3x.h"
 #include "src/minimap/textures/exit_t3x.h"
 #include "src/minimap/textures/menu_cleft_t3x.h"

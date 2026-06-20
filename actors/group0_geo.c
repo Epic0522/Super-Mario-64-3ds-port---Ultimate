@@ -6,6 +6,7 @@
 
 #include "common1.h"
 #include "group0.h"
+#include "enhancements/death_ragdoll.h"
 
 #include "bubble/geo.inc.c"
 #include "walk_smoke/geo.inc.c"

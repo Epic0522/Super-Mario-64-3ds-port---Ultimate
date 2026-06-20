@@ -23,6 +23,7 @@
 #include "sm64.h"
 #include "sound_init.h"
 #include "thread6.h"
+#include "enhancements/death_ragdoll.h"
 
 #define INT_GROUND_POUND_OR_TWIRL (1 << 0) // 0x01
 #define INT_PUNCH                 (1 << 1) // 0x02
@@ -707,6 +708,8 @@ u32 take_damage_from_interact_object(struct MarioState *m) {
 
 u32 take_damage_and_knock_back(struct MarioState *m, struct Object *o) {
     u32 damage;
+    u32 knockbackAction;
+    enum DeathRagdollProfile deathRagdollProfile;
 
     if (!sInvulnerable && !(m->flags & MARIO_VANISH_CAP)
         && !(o->oInteractionSubtype & INT_SUBTYPE_DELAY_INVINCIBILITY)) {
@@ -724,6 +727,18 @@ u32 take_damage_and_knock_back(struct MarioState *m, struct Object *o) {
         }
 
         update_mario_sound_and_camera(m);
+        if (death_ragdoll_damage_would_kill(m)) {
+            knockbackAction = determine_knockback_action(m, o->oDamageOrCoinValue);
+            deathRagdollProfile = death_ragdoll_profile_from_object(o);
+            if (deathRagdollProfile != DEATH_RAGDOLL_PROFILE_DISABLED) {
+                return death_ragdoll_start_with_profile(m,
+                                                        death_ragdoll_is_explosion_source(o)
+                                                            ? DEATH_RAGDOLL_SOURCE_EXPLOSION
+                                                            : DEATH_RAGDOLL_SOURCE_KNOCKBACK,
+                                                        deathRagdollProfile);
+            }
+            return drop_and_set_mario_action(m, knockbackAction, damage);
+        }
         return drop_and_set_mario_action(m, determine_knockback_action(m, o->oDamageOrCoinValue),
                                          damage);
     }
@@ -1196,6 +1211,11 @@ u32 interact_snufit_bullet(struct MarioState *m, UNUSED u32 interactType, struct
             play_sound(SOUND_MARIO_ATTACKED, m->marioObj->header.gfx.cameraToObject);
             update_mario_sound_and_camera(m);
 
+            if (death_ragdoll_damage_would_kill(m)) {
+                determine_knockback_action(m, o->oDamageOrCoinValue);
+                return death_ragdoll_start_with_profile(m, DEATH_RAGDOLL_SOURCE_KNOCKBACK,
+                                                        DEATH_RAGDOLL_PROFILE_PROJECTILE);
+            }
             return drop_and_set_mario_action(m, determine_knockback_action(m, o->oDamageOrCoinValue),
                                              o->oDamageOrCoinValue);
         }
@@ -1284,6 +1304,10 @@ u32 interact_shock(struct MarioState *m, UNUSED u32 interactType, struct Object 
         queue_rumble_data(70, 60);
 #endif
 
+        if (death_ragdoll_damage_would_kill(m)) {
+            return death_ragdoll_start_with_profile(m, DEATH_RAGDOLL_SOURCE_KNOCKBACK,
+                                                    DEATH_RAGDOLL_PROFILE_SHOCK);
+        }
         if (m->action & (ACT_FLAG_SWIMMING | ACT_FLAG_METAL_WATER)) {
             return drop_and_set_mario_action(m, ACT_WATER_SHOCKED, 0);
         } else {

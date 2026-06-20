@@ -39,11 +39,16 @@
 
 #include <include/types.h>
 #include <enhancements/puppycam.h>
+#include <enhancements/death_ragdoll.h>
 
 s16 rightstick[2];
 u8 camera_mode_button_pressed;
 u8 camera_recenter_button_pressed;
 u8 level_select_button_pressed;
+u8 gDeathRagdollDebugZrPressed;
+u8 gDeathRagdollDebugZlPressed;
+u8 gDeathRagdollDebugZrHeld;
+u8 gDeathRagdollDebugZlHeld;
 
 static int button_mapping[10][2];
 static u32 camera_control_keys_prev;
@@ -77,8 +82,13 @@ static u32 controller_3ds_get_held(void)
     u32 kDown = kHeld & ~(KEY_X | KEY_Y);
     u32 kPressed = kHeld & ~camera_control_keys_prev;
     const u32 levelSelectCombo = KEY_SELECT | KEY_ZL | KEY_ZR;
-    bool levelSelectRequested = (kHeld & levelSelectCombo) == levelSelectCombo;
+    bool debugEnabled = death_ragdoll_debug_is_enabled();
+    bool levelSelectRequested = debugEnabled && (kHeld & levelSelectCombo) == levelSelectCombo;
 
+    gDeathRagdollDebugZrPressed = (kPressed & KEY_ZR) != 0;
+    gDeathRagdollDebugZlPressed = (kPressed & KEY_ZL) != 0;
+    gDeathRagdollDebugZrHeld = (kHeld & KEY_ZR) != 0;
+    gDeathRagdollDebugZlHeld = (kHeld & KEY_ZL) != 0;
     camera_control_keys_prev = kHeld;
     if (levelSelectRequested) {
         level_select_button_pressed |= (kPressed & (KEY_ZL | KEY_ZR | KEY_SELECT)) != 0;

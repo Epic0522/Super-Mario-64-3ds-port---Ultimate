@@ -3,6 +3,7 @@
 #include "gfx_3ds.h"
 #include "gfx_3ds_menu.h"
 #include "gfx_citro3d.h"
+#include "enhancements/death_ragdoll.h"
 
 struct gfx_configuration gfx_config = {false, false}; // AA off, 800px off
 
@@ -11,6 +12,7 @@ static int buffer_offset;
 
 static C3D_Tex mode_400_tex, mode_800_tex;
 static C3D_Tex aa_off_tex, aa_on_tex;
+static C3D_Tex debug_off_tex, debug_on_tex;
 static C3D_Tex resume_tex, exit_tex;
 static C3D_Tex menu_cleft_tex, menu_cright_tex, menu_cdown_tex, menu_cup_tex;
 
@@ -76,6 +78,9 @@ static void gfx_3ds_menu_draw_buttons(float * vertex_buffer)
     gfx_3ds_menu_draw_button(vertex_buffer, 11, 96, gfx_config.useAA ? aa_on_tex : aa_off_tex, false);
     // screen mode
     gfx_3ds_menu_draw_button(vertex_buffer, 86, 96, gfx_config.useWide ? mode_800_tex : mode_400_tex, false);
+    // debug
+    gfx_3ds_menu_draw_button(vertex_buffer, 161, 96,
+                             death_ragdoll_debug_is_enabled() ? debug_on_tex : debug_off_tex, false);
     // resume
     gfx_3ds_menu_draw_button(vertex_buffer, 11, 208, resume_tex, false);
     // exit game
@@ -129,6 +134,12 @@ menu_action gfx_3ds_menu_on_touch(int touch_x, int touch_y)
         
         return CONFIG_CHANGED;
     }
+    // toggle debug controls
+    else if (is_inside_box(touch_x, touch_y, 161, 32, 64, 64))
+    {
+        death_ragdoll_debug_set_enabled(!death_ragdoll_debug_is_enabled());
+        return CONFIG_CHANGED;
+    }
     // hide menu
     else if (is_inside_box(touch_x, touch_y, 11, 144, 64, 64))
     {
@@ -157,6 +168,12 @@ void gfx_3ds_menu_init()
 
     load_t3x_texture(&aa_off_tex, NULL, aa_off_t3x, aa_off_t3x_size);
     C3D_TexSetFilter(&aa_off_tex, GPU_LINEAR, GPU_NEAREST);
+
+    load_t3x_texture(&debug_on_tex, NULL, debug_on_t3x, debug_on_t3x_size);
+    C3D_TexSetFilter(&debug_on_tex, GPU_LINEAR, GPU_NEAREST);
+
+    load_t3x_texture(&debug_off_tex, NULL, debug_off_t3x, debug_off_t3x_size);
+    C3D_TexSetFilter(&debug_off_tex, GPU_LINEAR, GPU_NEAREST);
 
     load_t3x_texture(&resume_tex, NULL, resume_t3x, resume_t3x_size);
     C3D_TexSetFilter(&resume_tex, GPU_LINEAR, GPU_NEAREST);

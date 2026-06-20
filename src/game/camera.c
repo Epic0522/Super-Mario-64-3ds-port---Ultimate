@@ -28,8 +28,14 @@
 #include "paintings.h"
 #include "engine/graph_node.h"
 #include "level_table.h"
+#include "enhancements/death_ragdoll.h"
 
 #define CBUTTON_MASK (U_CBUTTONS | D_CBUTTONS | L_CBUTTONS | R_CBUTTONS)
+#define DEATH_RAGDOLL_TOPDOWN_CAMERA_HEIGHT 760.0f
+#define DEATH_RAGDOLL_TOPDOWN_CAMERA_DISTANCE 55.0f
+#define DEATH_RAGDOLL_TOPDOWN_FOCUS_Y_OFFSET 85.0f
+#define DEATH_RAGDOLL_TOPDOWN_ROTATE_SPEED 0x60
+#define DEATH_RAGDOLL_TOPDOWN_DELAY_FRAMES 21
 
 /**
  * @file camera.c
@@ -84,6 +90,44 @@ Vec3f sOldPosition;
  * Stores Lakitu's focus from the last frame, used for transitioning in next_lakitu_state()
  */
 Vec3f sOldFocus;
+
+static void update_death_ragdoll_topdown_camera(struct Camera *c) {
+    struct MarioState *m = &gMarioStates[0];
+    Vec3f focus;
+    Vec3f pos;
+    s16 yaw;
+
+    if (m->action != ACT_DEATH_RAGDOLL || m->actionTimer < DEATH_RAGDOLL_TOPDOWN_DELAY_FRAMES
+        || death_ragdoll_debug_is_enabled()) {
+        return;
+    }
+
+    yaw = m->faceAngle[1] + 0x8000
+        + (m->actionTimer - DEATH_RAGDOLL_TOPDOWN_DELAY_FRAMES) * DEATH_RAGDOLL_TOPDOWN_ROTATE_SPEED;
+    vec3f_set(focus,
+              m->pos[0],
+              m->pos[1] + DEATH_RAGDOLL_TOPDOWN_FOCUS_Y_OFFSET,
+              m->pos[2]);
+    vec3f_set(pos,
+              focus[0] + sins(yaw) * DEATH_RAGDOLL_TOPDOWN_CAMERA_DISTANCE,
+              focus[1] + DEATH_RAGDOLL_TOPDOWN_CAMERA_HEIGHT,
+              focus[2] + coss(yaw) * DEATH_RAGDOLL_TOPDOWN_CAMERA_DISTANCE);
+
+    camera_approach_f32_symmetric_bool(&c->focus[0], focus[0], 72.0f);
+    camera_approach_f32_symmetric_bool(&c->focus[1], focus[1], 72.0f);
+    camera_approach_f32_symmetric_bool(&c->focus[2], focus[2], 72.0f);
+    camera_approach_f32_symmetric_bool(&c->pos[0], pos[0], 96.0f);
+    camera_approach_f32_symmetric_bool(&c->pos[1], pos[1], 128.0f);
+    camera_approach_f32_symmetric_bool(&c->pos[2], pos[2], 96.0f);
+
+    c->nextYaw = calculate_yaw(c->focus, c->pos);
+    c->yaw = c->nextYaw;
+    gLakituState.posHSpeed = 0.64f;
+    gLakituState.posVSpeed = 0.64f;
+    gLakituState.focHSpeed = 0.86f;
+    gLakituState.focVSpeed = 0.86f;
+}
+
 /**
  * Global array of PlayerCameraState.
  * L is real.
@@ -3355,6 +3399,7 @@ void update_camera(struct Camera *c) {
         }
     }
 
+    update_death_ragdoll_topdown_camera(c);
     update_lakitu(c);
 
     gLakituState.lastFrameAction = sMarioCamState->action;
