@@ -54,8 +54,6 @@ The files currently preserved in that override pack are:
 現在この上書きパックに含まれているファイル：
 
 - `actors/blue_coin_switch/geo.inc.c`
-- `actors/bobomb/geo.inc.c`
-- `actors/bobomb/model.inc.c`
 - `actors/cannon_barrel/geo.inc.c`
 - `actors/cannon_base/geo.inc.c`
 - `actors/capswitch/geo.inc.c`
@@ -159,6 +157,7 @@ When debug mode is enabled from the lower-screen menu, these 3DS shortcuts becom
 | Shortcut | Function |
 | --- | --- |
 | `SELECT + ZL + ZR` | Open the level selector. |
+| `START + ZL + ZR` in the final Bowser fight | Trigger the ending sequence and staff roll. |
 | Double-tap `ZR` | Manually trigger Mario's death ragdoll action. |
 | Hold `ZR` | Restore Mario's health while held. |
 | Double-tap `ZL` | Drop Mario to low health. |
@@ -167,6 +166,7 @@ When debug mode is enabled from the lower-screen menu, these 3DS shortcuts becom
 | ショートカット | 機能 |
 | --- | --- |
 | `SELECT + ZL + ZR` | レベルセレクトを開きます。 |
+| 最終クッパ戦で `START + ZL + ZR` | エンディングとスタッフロールへ進みます。 |
 | `ZR` をダブルタップ | マリオの死亡ラグドール動作を手動で発動します。 |
 | `ZR` を長押し | マリオの体力を回復します。 |
 | `ZL` をダブルタップ | マリオの体力を 1 まで下げます。 |

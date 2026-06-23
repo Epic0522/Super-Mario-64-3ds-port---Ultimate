@@ -1,6 +1,7 @@
 #include <PR/ultratypes.h>
 
 #include "area.h"
+#include "camera.h"
 #include "engine/behavior_script.h"
 #include "engine/math_util.h"
 #include "engine/surface_load.h"
@@ -185,6 +186,8 @@ static Mtx *sAppendingDynamicShadowMaskTransformInterpolated;
 static struct Surface *sAppendingDynamicShadowSurface;
 static u16 sAppendingDynamicShadowGroup;
 static u16 sNextDynamicShadowGroup = 1;
+static Mat4 *sDynamicShadowModelMtxOverride;
+static Mat4 *sDynamicShadowModelMtxInterpolatedOverride;
 #define DYNAMIC_SHADOW_MAX_MASK_CACHE 48
 struct DynamicShadowMaskCacheEntry {
     struct Surface *anchor;
@@ -1033,6 +1036,8 @@ static void geo_process_camera(struct GraphNodeCamera *node) {
     vec3f_copy(node->prevPos, node->pos);
     vec3f_copy(node->prevFocus, node->focus);
     node->prevTimestamp = gGlobalTimer;
+    vec3f_copy(node->posInterpolated, posInterpolated);
+    vec3f_copy(node->focusInterpolated, focusInterpolated);
     mtxf_lookat(cameraTransform, posInterpolated, focusInterpolated, node->roll);
     mtxf_mul(gMatStackInterpolated[gMatStackIndex + 1], cameraTransform, gMatStackInterpolated[gMatStackIndex]);
 
@@ -1567,7 +1572,7 @@ static void dynamic_shadow_update_light_matrices(void) {
 
     dynamic_shadow_make_camera_inv_mtx(gDynamicShadowCameraInvMtx,
                                        *gCurGraphNodeCamera->matrixPtrInterpolated,
-                                       gCurGraphNodeCamera->pos);
+                                       gCurGraphNodeCamera->posInterpolated);
     mtxf_lookat(lightView, lightPos, center, 0);
     dynamic_shadow_make_ortho_mtx(lightProj, -range, range, -range, range, 100.0f, 12000.0f);
     mtxf_mul(gDynamicShadowLightVpMtx, lightView, lightProj);
@@ -1578,6 +1583,50 @@ static u8 dynamic_shadow_is_mario_object(void) {
     return gCurGraphNodeObject != NULL
         && gMarioObject != NULL
         && (struct Object *) gCurGraphNodeObject == gMarioObject;
+}
+
+static u8 dynamic_shadow_is_ending_peach_cutscene_actor(void) {
+    const BehaviorScript *behavior = dynamic_shadow_current_behavior();
+
+    if (gMarioState == NULL || gMarioState->action != ACT_END_PEACH_CUTSCENE) {
+        return FALSE;
+    }
+
+    return dynamic_shadow_is_mario_object()
+        || dynamic_shadow_behavior_is(behavior, bhvEndPeach)
+        || dynamic_shadow_behavior_is(behavior, bhvEndToad);
+}
+
+static u8 dynamic_shadow_should_disable_ending_actor_dynamic_shadow(void) {
+    const BehaviorScript *behavior = dynamic_shadow_current_behavior();
+
+    if (gMarioState == NULL || gMarioState->action != ACT_END_PEACH_CUTSCENE) {
+        return FALSE;
+    }
+
+    return !dynamic_shadow_is_mario_object()
+        && (dynamic_shadow_behavior_is(behavior, bhvEndPeach)
+            || dynamic_shadow_behavior_is(behavior, bhvEndToad));
+}
+
+static u8 dynamic_shadow_should_hide_ending_peach_blob(void) {
+    return gMarioState != NULL
+        && gMarioState->action == ACT_END_PEACH_CUTSCENE
+        && dynamic_shadow_behavior_is(dynamic_shadow_current_behavior(), bhvEndPeach);
+}
+
+static void dynamic_shadow_sync_ending_cutscene_object_pos(struct Object *obj) {
+    if (gMarioState == NULL || obj == NULL || obj == gMarioObject) {
+        return;
+    }
+
+    if (gMarioState->action != ACT_CREDITS_CUTSCENE) {
+        return;
+    }
+
+    obj->header.gfx.pos[0] = obj->oPosX;
+    obj->header.gfx.pos[1] = obj->oPosY + obj->oGraphYOffset;
+    obj->header.gfx.pos[2] = obj->oPosZ;
 }
 
 static f32 dynamic_shadow_dist_sq_3f(Vec3f a, Vec3f b) {
@@ -1822,6 +1871,8 @@ static u8 dynamic_shadow_allows_billboard_caster(void) {
         || dynamic_shadow_behavior_is(behavior, bhvSwoop)
         || dynamic_shadow_behavior_is(behavior, bhvChainChomp)
         || dynamic_shadow_behavior_is(behavior, bhvBobomb)
+        || dynamic_shadow_behavior_is(behavior, bhvBobombBuddy)
+        || dynamic_shadow_behavior_is(behavior, bhvBobombBuddyOpensCannon)
         || dynamic_shadow_behavior_is(behavior, bhvChuckya)
         || dynamic_shadow_behavior_is(behavior, bhvHeaveHo)
         || dynamic_shadow_behavior_is(behavior, bhvSnufit)
@@ -2270,6 +2321,13 @@ static u8 dynamic_shadow_is_platform_interaction_caster(void) {
         dynamic_shadow_current_behavior());
 }
 
+static u8 dynamic_shadow_should_use_original_hitbox_blob(void) {
+    const BehaviorScript *behavior = dynamic_shadow_current_behavior();
+
+    return dynamic_shadow_behavior_is(behavior, bhvExclamationBox);
+
+}
+
 static u8 dynamic_shadow_requires_static_floor_receiver(void) {
     const BehaviorScript *behavior = dynamic_shadow_current_behavior();
 
@@ -2285,6 +2343,11 @@ static u8 dynamic_shadow_requires_static_floor_receiver(void) {
 
 static u8 dynamic_shadow_never_keep_original_shadow(void) {
     const BehaviorScript *behavior = dynamic_shadow_current_behavior();
+
+    if (dynamic_shadow_is_ending_peach_cutscene_actor()
+        && !dynamic_shadow_should_disable_ending_actor_dynamic_shadow()) {
+        return TRUE;
+    }
 
     if (behavior == NULL) {
         return FALSE;
@@ -2859,6 +2922,11 @@ static u8 dynamic_shadow_object_is_held(struct Object *obj) {
 
     return obj->oHeldState != HELD_FREE
         || (gMarioState != NULL && gMarioState->heldObj == obj);
+}
+
+static u8 dynamic_shadow_held_object_can_cast_dynamic_shadow(struct Object *obj) {
+    return obj != NULL
+        && dynamic_shadow_behavior_is(obj->behavior, bhvBowser);
 }
 
 static f32 dynamic_shadow_get_held_object_blob_scale(void) {
@@ -3585,6 +3653,18 @@ static f32 dynamic_shadow_find_receiver_floor(Vec3f shadowPos, struct Surface **
         minHeightFromFloor = -300.0f;
     }
 
+    if (dynamic_shadow_is_ending_peach_cutscene_actor()) {
+        floorHeight = find_floor(shadowPos[0], shadowPos[1] + queryHeight, shadowPos[2], floor);
+        if (floorHeight > -10000.0f && *floor != NULL
+            && dynamic_shadow_surface_can_receive(*floor)
+            && shadowPos[1] - floorHeight >= minHeightFromFloor
+            && shadowPos[1] - floorHeight < maxHeightFromFloor) {
+            return floorHeight;
+        }
+        *floor = NULL;
+        return -11000.0f;
+    }
+
     if (dynamic_shadow_is_whomp_like() && caster != NULL && caster->oFloor != NULL
         && caster->oFloor->object != caster) {
         floorHeight = caster->oFloorHeight;
@@ -3771,7 +3851,8 @@ static u8 dynamic_shadow_can_render_model_object(struct GraphNode *children) {
         return FALSE;
     }
     obj = (struct Object *) gCurGraphNodeObject;
-    if (dynamic_shadow_object_is_held(obj)) {
+    if (dynamic_shadow_object_is_held(obj)
+        && !dynamic_shadow_held_object_can_cast_dynamic_shadow(obj)) {
         gDynamicShadowDebugRejectContext++;
         return FALSE;
     }
@@ -3859,6 +3940,15 @@ static u8 dynamic_shadow_should_keep_original_shadow(struct GraphNodeShadow *nod
         && node->shadowType == 0x01 + SHADOW_RECTANGLE_HARDCODED_OFFSET
         && dynamic_shadow_is_whomp_like()) {
         return !sCurrentObjectDynamicShadowGenerated;
+    }
+    if (dynamic_shadow_should_hide_ending_peach_blob()) {
+        return FALSE;
+    }
+    if (dynamic_shadow_should_use_original_hitbox_blob()) {
+        return TRUE;
+    }
+    if (dynamic_shadow_should_disable_ending_actor_dynamic_shadow()) {
+        return TRUE;
     }
     if (dynamic_shadow_never_keep_original_shadow()) {
         return FALSE;
@@ -4015,6 +4105,12 @@ static u8 geo_process_dynamic_model_shadow(struct GraphNode *children, Vec3f sha
     s32 appendedListsBefore;
 
     gDynamicShadowDebugShadowNodes++;
+    if (dynamic_shadow_should_disable_ending_actor_dynamic_shadow()) {
+        return FALSE;
+    }
+    if (dynamic_shadow_should_use_original_hitbox_blob()) {
+        return FALSE;
+    }
     if (!dynamic_shadow_can_render_model_object(children)) {
         return FALSE;
     }
@@ -4050,10 +4146,17 @@ static u8 geo_process_dynamic_model_shadow(struct GraphNode *children, Vec3f sha
     dynamic_shadow_surface_to_geometry(&floorGeo, surface);
     dynamic_shadow_make_projection_mtx(projectionMtx, &floorGeo, light);
 
-    mtxf_rotate_zxy_and_translate(objectMtx, gCurGraphNodeObject->pos, gCurGraphNodeObject->angle);
-    mtxf_scale_vec3f(objectMtx, objectMtx, gCurGraphNodeObject->scale);
+    if (sDynamicShadowModelMtxOverride != NULL) {
+        mtxf_copy(objectMtx, *sDynamicShadowModelMtxOverride);
+    } else {
+        mtxf_rotate_zxy_and_translate(objectMtx, gCurGraphNodeObject->pos, gCurGraphNodeObject->angle);
+        mtxf_scale_vec3f(objectMtx, objectMtx, gCurGraphNodeObject->scale);
+    }
     mtxf_mul(projectedMtx, objectMtx, projectionMtx);
     mtxf_mul(shadowMtx, projectedMtx, *gCurGraphNodeCamera->matrixPtr);
+    if (sDynamicShadowModelMtxInterpolatedOverride != NULL) {
+        mtxf_mul(projectedMtx, *sDynamicShadowModelMtxInterpolatedOverride, projectionMtx);
+    }
     mtxf_mul(shadowMtxInterpolated, projectedMtx, *gCurGraphNodeCamera->matrixPtrInterpolated);
 
     // Nudge the projected shadow slightly above the ground surface to avoid
@@ -4202,6 +4305,11 @@ static void geo_process_shadow(struct GraphNodeShadow *node) {
                                        *gCurGraphNodeCamera->matrixPtr);
             shadowScale = node->shadowScale;
         } else {
+#ifdef TARGET_N3DS
+            // Ending/staff actors can have oPos driven directly by cutscene
+            // code, bypassing the usual gfx position refresh.
+            dynamic_shadow_sync_ending_cutscene_object_pos((struct Object *) gCurGraphNodeObject);
+#endif
             vec3f_copy(shadowPos, gCurGraphNodeObject->pos);
             shadowScale = node->shadowScale * gCurGraphNodeObject->scale[0];
         }
@@ -4255,6 +4363,11 @@ static void geo_process_shadow(struct GraphNodeShadow *node) {
 #ifdef TARGET_N3DS
         u8 keepOriginalShadow;
         u8 originalShadowType = node->shadowType;
+        u8 shouldCheckOriginalShadow =
+            !sCurrentObjectDynamicShadowGenerated
+            || (gCurGraphNodeObject != NULL
+                && ((struct Object *) gCurGraphNodeObject == gMarioObject
+                    || node->shadowType == SHADOW_CIRCLE_PLAYER));
         if (gCurGraphNodeHeldObject == NULL
             && !sCurrentObjectDynamicShadowGenerated && node->node.children != NULL) {
             u8 savedUseShadowNodeAnchor = sUseShadowNodeAnchor;
@@ -4265,8 +4378,12 @@ static void geo_process_shadow(struct GraphNodeShadow *node) {
             sDynamicShadowBillboardScale = 0.0f;
             sUseShadowNodeAnchor = savedUseShadowNodeAnchor;
         }
-        keepOriginalShadow = gCurGraphNodeHeldObject != NULL
-            || dynamic_shadow_should_keep_original_shadow(node, shadowPos);
+        if (gCurGraphNodeHeldObject != NULL) {
+            keepOriginalShadow = !sCurrentObjectDynamicShadowGenerated;
+        } else {
+            keepOriginalShadow =
+                shouldCheckOriginalShadow && dynamic_shadow_should_keep_original_shadow(node, shadowPos);
+        }
         if (gCurGraphNodeHeldObject != NULL) {
             originalShadowType = SHADOW_CIRCLE_4_VERTS;
             sHeldObjectShadowRendered = TRUE;
@@ -4443,6 +4560,7 @@ static void geo_process_object(struct Object *node) {
     sCurrentObjectDynamicShadowGenerated = FALSE;
     sCurrentObjectPlatformInteractionCaster =
         dynamic_shadow_behavior_is_platform_interaction_caster(node->behavior);
+    dynamic_shadow_sync_ending_cutscene_object_pos(node);
 #endif
 
     if (node->header.gfx.unk18 == gCurGraphNodeRoot->areaIndex) {
@@ -4522,7 +4640,13 @@ static void geo_process_object(struct Object *node) {
             Mtx *mtxInterpolated = alloc_display_list(sizeof(*mtxInterpolated));
 #ifdef TARGET_N3DS
             u8 objectDynamicShadowGenerated = FALSE;
-            u8 objectCanGenerateDynamicShadow = !dynamic_shadow_object_is_held(node);
+            u8 objectCanGenerateDynamicShadow =
+                (!dynamic_shadow_object_is_held(node)
+                 || dynamic_shadow_held_object_can_cast_dynamic_shadow(node))
+                && (gMarioState == NULL || gMarioState->action != ACT_END_PEACH_CUTSCENE
+                    || node == gMarioObject
+                    || (!dynamic_shadow_behavior_is(node->behavior, bhvEndPeach)
+                        && !dynamic_shadow_behavior_is(node->behavior, bhvEndToad)));
 #endif
 
             mtxf_to_mtx(mtx, gMatStack[gMatStackIndex]);
@@ -4620,6 +4744,8 @@ void geo_process_held_object(struct GraphNodeHeldObject *node) {
     Vec3f scaleInterpolated;
 #ifdef TARGET_N3DS
     u8 savedHeldObjectShadowRendered = sHeldObjectShadowRendered;
+    struct GraphNodeObject *savedGraphNodeObject;
+    u8 savedObjectDynamicShadowGenerated;
 #endif
 
 #ifdef TARGET_N3DS
@@ -4684,12 +4810,47 @@ void geo_process_held_object(struct GraphNodeHeldObject *node) {
         gCurAnimType = 0;
         gCurGraphNodeHeldObject = (void *) node;
 #ifdef TARGET_N3DS
+        savedGraphNodeObject = gCurGraphNodeObject;
+        savedObjectDynamicShadowGenerated = sCurrentObjectDynamicShadowGenerated;
+        gCurGraphNodeObject = (struct GraphNodeObject *) node->objNode;
+        node->objNode->header.gfx.cameraToObject[0] = gMatStack[gMatStackIndex][3][0];
+        node->objNode->header.gfx.cameraToObject[1] = gMatStack[gMatStackIndex][3][1];
+        node->objNode->header.gfx.cameraToObject[2] = gMatStack[gMatStackIndex][3][2];
         sHeldObjectShadowRendered = FALSE;
+        sCurrentObjectDynamicShadowGenerated = FALSE;
 #endif
         if (node->objNode->header.gfx.unk38.curAnim != NULL) {
             geo_set_animation_globals(&node->objNode->header.gfx.unk38, hasAnimation);
         }
 
+#ifdef TARGET_N3DS
+        if (dynamic_shadow_held_object_can_cast_dynamic_shadow(node->objNode)) {
+            Mat4 cameraInvMtx;
+            Mat4 cameraInvMtxInterpolated;
+            Mat4 heldModelMtx;
+            Mat4 heldModelMtxInterpolated;
+            Vec3f heldShadowPos;
+            u8 savedUseShadowNodeAnchor = sUseShadowNodeAnchor;
+            sUseShadowNodeAnchor = TRUE;
+            dynamic_shadow_make_camera_inv_mtx(cameraInvMtx, *gCurGraphNodeCamera->matrixPtr,
+                                               gCurGraphNodeCamera->pos);
+            dynamic_shadow_make_camera_inv_mtx(cameraInvMtxInterpolated,
+                                               *gCurGraphNodeCamera->matrixPtrInterpolated,
+                                               gCurGraphNodeCamera->posInterpolated);
+            mtxf_mul(heldModelMtx, gMatStack[gMatStackIndex], cameraInvMtx);
+            mtxf_mul(heldModelMtxInterpolated, gMatStackInterpolated[gMatStackIndex],
+                     cameraInvMtxInterpolated);
+            get_pos_from_transform_mtx(heldShadowPos, gMatStack[gMatStackIndex],
+                                       *gCurGraphNodeCamera->matrixPtr);
+            sDynamicShadowModelMtxOverride = &heldModelMtx;
+            sDynamicShadowModelMtxInterpolatedOverride = &heldModelMtxInterpolated;
+            sCurrentObjectDynamicShadowGenerated =
+                geo_process_dynamic_model_shadow(node->objNode->header.gfx.sharedChild, heldShadowPos);
+            sDynamicShadowModelMtxOverride = NULL;
+            sDynamicShadowModelMtxInterpolatedOverride = NULL;
+            sUseShadowNodeAnchor = savedUseShadowNodeAnchor;
+        }
+#endif
         geo_process_node_and_siblings(node->objNode->header.gfx.sharedChild);
 #ifdef TARGET_N3DS
         if (!sHeldObjectShadowRendered && dynamic_shadow_held_object_needs_blob_fallback()) {
@@ -4748,6 +4909,8 @@ void geo_process_held_object(struct GraphNodeHeldObject *node) {
 #endif
         gCurGraphNodeHeldObject = NULL;
 #ifdef TARGET_N3DS
+        gCurGraphNodeObject = savedGraphNodeObject;
+        sCurrentObjectDynamicShadowGenerated = savedObjectDynamicShadowGenerated;
         sHeldObjectShadowRendered = savedHeldObjectShadowRendered;
 #endif
         gCurAnimType = gGeoTempState.type;
