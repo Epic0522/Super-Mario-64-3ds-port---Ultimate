@@ -27,6 +27,7 @@ extern unsigned int puppycam_degrade;
 extern unsigned int puppycam_aggression;
 extern unsigned int puppycam_panlevel;
 extern unsigned int dynamic_shadows_enabled;
+extern unsigned int death_ragdoll_enabled;
 #ifdef TARGET_N3DS
 extern unsigned int config3dsAntiAliasing;
 extern unsigned int config3dsWideMode;

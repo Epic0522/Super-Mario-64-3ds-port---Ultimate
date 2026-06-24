@@ -1071,18 +1071,24 @@ static void gfx_3ds_minimap_draw_credits_str(float *vbo_buffer, s16 x, s16 y,
 static void gfx_3ds_minimap_draw_cake_end_screen(float *vbo_buffer)
 {
     enum {
-        PRESS_HOME_FADE_FRAMES = 90,
+        PRESS_HOME_DELAY_FRAMES = 720,
         PRESS_HOME_BLINK_PERIOD = 32,
         PRESS_HOME_BLINK_OFF_FRAME = 22,
     };
     u8 alpha = 255;
-    u16 blinkTimer = sCakeEndPressHomeTimer;
+    u16 blinkTimer;
 
     gfx_3ds_minimap_draw_background_color_rgb(vbo_buffer, 0x000000);
 
-    if (blinkTimer < PRESS_HOME_FADE_FRAMES) {
-        alpha = (u8) (blinkTimer * 255 / PRESS_HOME_FADE_FRAMES);
-    } else if (((blinkTimer - PRESS_HOME_FADE_FRAMES) % PRESS_HOME_BLINK_PERIOD) >= PRESS_HOME_BLINK_OFF_FRAME) {
+    if (sCakeEndPressHomeTimer < PRESS_HOME_DELAY_FRAMES) {
+        gfx_3ds_minimap_draw_music_title(vbo_buffer);
+        sCakeEndPressHomeTimer++;
+        return;
+    }
+
+    blinkTimer = sCakeEndPressHomeTimer - PRESS_HOME_DELAY_FRAMES;
+
+    if ((blinkTimer % PRESS_HOME_BLINK_PERIOD) >= PRESS_HOME_BLINK_OFF_FRAME) {
         alpha = 0;
     }
 
@@ -1446,7 +1452,7 @@ uint32_t gfx_3ds_draw_minimap(float *vertex_buffer, int vertex_offset)
         return buffer_offset - vertex_offset;
     }
 
-    if (gCurrLevelNum == LEVEL_ENDING) {
+    if (gN3dsCakeEndScreenActive) {
         sStarSelectPressStartTimer = 0;
         gfx_3ds_minimap_draw_cake_end_screen(vertex_buffer);
         return buffer_offset - vertex_offset;

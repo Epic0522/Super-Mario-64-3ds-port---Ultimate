@@ -196,6 +196,8 @@ struct GraphNodeCamera
     /*0x28*/ Vec3f focus;
     Vec3f prevPos;
     Vec3f prevFocus;
+    Vec3f posInterpolated;
+    Vec3f focusInterpolated;
     u32 prevTimestamp;
     /*0x34*/ Mat4 *matrixPtr; // pointer to look-at matrix of this camera as a Mat4
     Mat4 *matrixPtrInterpolated;

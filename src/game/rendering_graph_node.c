@@ -26,6 +26,7 @@
 
 #ifdef TARGET_N3DS
 #include "actors/common0.h"
+#include "actors/group11.h"
 #include "src/pc/gfx/gfx_citro3d.h"
 #include "src/pc/gfx/color_conversion.h"
 #include "enhancements/dynamic_shadows.h"
@@ -161,6 +162,8 @@ static u8 sSuppressDynamicShadowReceiver = FALSE;
 #ifdef TARGET_N3DS
 static u8 dynamic_shadow_allows_billboard_caster(void);
 static u8 dynamic_shadow_allows_billboard_component_caster(void);
+static u8 dynamic_shadow_should_skip_billboard_circle(struct GraphNodeBillboard *node,
+                                                      Vec3f circleCenter);
 static u8 dynamic_shadow_is_mario_object(void);
 static u8 dynamic_shadow_is_cannon_base_object(void);
 static u8 dynamic_shadow_allows_shadow_alpha_layer(void);
@@ -1228,7 +1231,9 @@ static void geo_process_billboard(struct GraphNodeBillboard *node) {
         gMatStackInterpolatedFixed[gMatStackIndex] = mtxInterpolated;
 
         circleList = dynamic_shadow_create_billboard_circle(node, circleCenter);
-        dynamic_shadow_append_circle_on_receiver(circleList, circleCenter);
+        if (!dynamic_shadow_should_skip_billboard_circle(node, circleCenter)) {
+            dynamic_shadow_append_circle_on_receiver(circleList, circleCenter);
+        }
         gMatStackIndex--;
         return;
     }
@@ -1842,6 +1847,24 @@ static u8 dynamic_shadow_is_coin(void) {
         || dynamic_shadow_behavior_is(behavior, bhvBlueCoinSliding)
         || dynamic_shadow_behavior_is(behavior, bhvBlueCoinJumping)
         || dynamic_shadow_behavior_is(behavior, bhvRedCoin);
+}
+
+static u8 dynamic_shadow_should_skip_billboard_circle(struct GraphNodeBillboard *node,
+                                                      Vec3f circleCenter) {
+    const BehaviorScript *behavior = dynamic_shadow_current_behavior();
+
+    (void) circleCenter;
+
+    if (gCurGraphNodeObject == NULL || behavior == NULL) {
+        return FALSE;
+    }
+
+    if (!dynamic_shadow_behavior_is(behavior, bhvWigglerHead)
+        && !dynamic_shadow_behavior_is(behavior, bhvWigglerBody)) {
+        return FALSE;
+    }
+
+    return !dynamic_shadow_node_contains_display_list(&node->node, wiggler_seg5_dl_0500C278);
 }
 
 static u8 dynamic_shadow_allows_billboard_caster(void) {

@@ -13,6 +13,7 @@
 #include "game/mario_step.h"
 #include "game/memory.h"
 #include "object_fields.h"
+#include "pc/configfile.h"
 #include "actors/group0.h"
 #include "enhancements/death_ragdoll.h"
 #ifdef TARGET_N3DS
@@ -4919,6 +4920,10 @@ u32 death_ragdoll_start_with_profile(struct MarioState *m, enum DeathRagdollSour
                                      enum DeathRagdollProfile profile) {
     s32 limb;
 
+    if (!death_ragdoll_enabled) {
+        return FALSE;
+    }
+
     if (profile == DEATH_RAGDOLL_PROFILE_DISABLED) {
         return FALSE;
     }
@@ -4996,6 +5001,10 @@ u32 death_ragdoll_start_with_profile(struct MarioState *m, enum DeathRagdollSour
 u32 death_ragdoll_start(struct MarioState *m, enum DeathRagdollSource source) {
     enum DeathRagdollProfile profile = DEATH_RAGDOLL_PROFILE_DEFAULT;
 
+    if (!death_ragdoll_enabled) {
+        return FALSE;
+    }
+
     if (source == DEATH_RAGDOLL_SOURCE_EXPLOSION) {
         profile = DEATH_RAGDOLL_PROFILE_EXPLOSION;
     } else if (source == DEATH_RAGDOLL_SOURCE_KNOCKBACK) {
@@ -5007,6 +5016,10 @@ u32 death_ragdoll_start(struct MarioState *m, enum DeathRagdollSource source) {
 
 u32 death_ragdoll_try_start_from_health_depleted(struct MarioState *m) {
     enum DeathRagdollProfile profile;
+
+    if (!death_ragdoll_enabled) {
+        return FALSE;
+    }
 
     if (m->health >= 0x100 || m->action == ACT_DEATH_RAGDOLL || (m->action & ACT_FLAG_INTANGIBLE)) {
         return FALSE;
@@ -5189,6 +5202,12 @@ u32 death_ragdoll_debug_update_shortcut(struct MarioState *m) {
 
     if (sDeathRagdollDebugZrTapTimer > 0) {
         sDeathRagdollDebugZrTapTimer = 0;
+        if (!death_ragdoll_enabled) {
+            m->health = 0xFF;
+            m->hurtCounter = 0;
+            m->healCounter = 0;
+            return set_mario_action(m, ACT_STANDING_DEATH, 0);
+        }
         return death_ragdoll_start(m, DEATH_RAGDOLL_SOURCE_DEFAULT);
     }
 
