@@ -148,6 +148,10 @@ static s8 sAllFilesExist = FALSE;
 // Mario A: 1 | Mario B: 2 | Mario C: 3 | Mario D: 4
 static s8 sSelectedFileNum = 0;
 
+#ifdef TARGET_N3DS
+s8 gN3dsFileSelectExiting = FALSE;
+#endif
+
 // Which coin score mode to use when scoring files. 0 for local
 // coin high score, 1 for high score across all files.
 static s8 sScoreFileCoinScoreMode = 0;
@@ -1528,6 +1532,7 @@ void load_main_menu_save_file(struct Object *fileButton, s32 fileNum) {
     if (fileButton->oMenuButtonState == MENU_BUTTON_STATE_FULLSCREEN) {
         sSelectedFileNum = fileNum;
 #ifdef TARGET_N3DS
+        gN3dsFileSelectExiting = TRUE;
         fileButton->oMenuButtonScale = fileButton->oMenuButtonScale * aspectScale;
 #endif
     }
@@ -3225,6 +3230,7 @@ s32 lvl_init_menu_values_and_cursor_pos(UNUSED s32 arg, UNUSED s32 unused) {
     gN3dsIntroScreenMode = -1;
     gN3dsIntroScreenExiting = FALSE;
     gN3dsIntroScreenFadeStart = 0;
+    gN3dsFileSelectExiting = FALSE;
 #endif
     sSelectedButtonID = MENU_BUTTON_NONE;
     sCurrentMenuLevel = MENU_LAYER_MAIN;

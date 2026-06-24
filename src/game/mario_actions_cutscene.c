@@ -21,6 +21,7 @@
 #include "mario.h"
 #include "mario_actions_moving.h"
 #include "mario_step.h"
+#include "memory.h"
 #include "moving_texture.h"
 #include "object_helpers.h"
 #include "object_list_processor.h"
@@ -44,6 +45,10 @@ static s16 sEndToadAnims[2];
 
 static Vp sEndCutsceneVp = { { { 640, 480, 511, 0 }, { 640, 480, 511, 0 } } };
 static struct CreditsEntry *sDispCreditsEntry = NULL;
+#ifdef TARGET_N3DS
+struct CreditsEntry *gN3dsBottomCreditsEntry = NULL;
+#endif
+static s8 sEndToadExtraExitLoops[2];
 
 // related to peach gfx?
 static s8 D_8032CBE4 = 0;
@@ -130,6 +135,11 @@ void print_displaying_credits_entry(void) {
 #endif
 
     if (sDispCreditsEntry != NULL) {
+#ifdef TARGET_N3DS
+        gN3dsBottomCreditsEntry = sDispCreditsEntry;
+        sDispCreditsEntry = NULL;
+        return;
+#endif
         currStrPtr = (char **) sDispCreditsEntry->unk0C;
         titleStr = *currStrPtr++;
         numLines = *titleStr++ - '0';
@@ -202,6 +212,37 @@ void bhv_end_toad_loop(void) {
         // 0-1, 2-3, 4, 5, 6, 7
         if (sEndToadAnims[toadAnimIndex] == 0 || sEndToadAnims[toadAnimIndex] == 2) {
             sEndToadAnims[toadAnimIndex]++;
+        } else if ((sEndToadAnims[toadAnimIndex] == 1 || sEndToadAnims[toadAnimIndex] == 3)
+                   && sEndToadExtraExitLoops[toadAnimIndex] == 0) {
+            Vec3s translation;
+            struct Animation *curAnim = gCurrentObject->header.gfx.unk38.curAnim;
+            u16 *animIndex = segmented_to_virtual((void *) curAnim->index);
+            s16 *animValues = segmented_to_virtual((void *) curAnim->values);
+            s16 finalFrame = curAnim->unk08 - 2;
+            f32 s = (f32) sins(gCurrentObject->oFaceAngleYaw);
+            f32 c = (f32) coss(gCurrentObject->oFaceAngleYaw);
+            f32 dx;
+            f32 dz;
+
+            dx = *(animValues + retrieve_animation_index(finalFrame, &animIndex)) / 4.0f;
+            translation[1] = *(animValues + retrieve_animation_index(finalFrame, &animIndex)) / 4.0f;
+            dz = *(animValues + retrieve_animation_index(finalFrame, &animIndex)) / 4.0f;
+
+            translation[0] = (dx * c) + (dz * s);
+            translation[2] = (-dx * s) + (dz * c);
+
+            gCurrentObject->oPosX += translation[0];
+            gCurrentObject->oPosY += translation[1];
+            gCurrentObject->oPosZ += translation[2];
+            gCurrentObject->header.gfx.pos[0] = gCurrentObject->oPosX;
+            gCurrentObject->header.gfx.pos[1] = gCurrentObject->oPosY;
+            gCurrentObject->header.gfx.pos[2] = gCurrentObject->oPosZ;
+
+            gCurrentObject->header.gfx.unk38.animFrame =
+                curAnim->unk04 + ((curAnim->flags & ANIM_FLAG_FORWARD) ? 1 : -1);
+            gCurrentObject->header.gfx.unk38.animAccel = 0;
+            gCurrentObject->header.gfx.unk38.animYTrans = 0;
+            sEndToadExtraExitLoops[toadAnimIndex]++;
         }
     }
 }
@@ -2118,6 +2159,8 @@ static void end_peach_cutscene_spawn_peach(struct MarioState *m) {
 
         sEndToadAnims[0] = 4;
         sEndToadAnims[1] = 5;
+        sEndToadExtraExitLoops[0] = 0;
+        sEndToadExtraExitLoops[1] = 0;
     }
 
     if (m->actionTimer >= TIMER_FADE_IN_PEACH) {
@@ -2418,6 +2461,8 @@ static void end_peach_cutscene_dialog_3(struct MarioState *m) {
             sEndPeachAnimation = 0;
             sEndToadAnims[0] = 0;
             sEndToadAnims[1] = 2;
+            sEndToadExtraExitLoops[0] = 0;
+            sEndToadExtraExitLoops[1] = 0;
             D_8032CBE8 = 1;
             set_cutscene_message(160, 227, 5, 30);
 #ifndef VERSION_JP
@@ -2575,6 +2620,19 @@ static s32 act_credits_cutscene(struct MarioState *m) {
     }
 
     if (m->actionTimer >= TIMER_CREDITS_SHOW) {
+#ifdef TARGET_N3DS
+        if (m->actionState < 12) {
+            m->actionState += 1;
+        }
+
+        width = m->actionState * 640 / 100;
+        height = m->actionState * 480 / 100;
+
+        sEndCutsceneVp.vp.vscale[0] = 640 - width;
+        sEndCutsceneVp.vp.vscale[1] = 480 - height;
+        sEndCutsceneVp.vp.vtrans[0] = 640;
+        sEndCutsceneVp.vp.vtrans[1] = 480;
+#else
         if (m->actionState < 40) {
             m->actionState += 2;
         }
@@ -2588,6 +2646,7 @@ static s32 act_credits_cutscene(struct MarioState *m) {
             (gCurrCreditsEntry->unk02 & 0x10 ? width : -width) * 56 / 100 + 640;
         sEndCutsceneVp.vp.vtrans[1] =
             (gCurrCreditsEntry->unk02 & 0x20 ? height : -height) * 66 / 100 + 480;
+#endif
 
         override_viewport_and_clip(&sEndCutsceneVp, 0, 0, 0, 0);
     }

@@ -48,6 +48,7 @@ def main():
         TEXTURE_DIR / "title_1996_nintendo.png"
     )
     render_centered_hud_text("PRESS START", TEXTURE_DIR / "title_press_start.png")
+    render_centered_hud_text("PRESS HOME", TEXTURE_DIR / "title_press_home.png")
 
 
 if __name__ == "__main__":

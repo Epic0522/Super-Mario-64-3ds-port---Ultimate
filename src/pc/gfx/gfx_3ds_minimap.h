@@ -37,6 +37,7 @@
 #include "src/minimap/textures/hud_x_t3x.h"
 #include "src/minimap/textures/title_1996_nintendo_t3x.h"
 #include "src/minimap/textures/title_press_start_t3x.h"
+#include "src/minimap/textures/title_press_home_t3x.h"
 #include "src/minimap/textures/music_boss_battle_t3x.h"
 #include "src/minimap/textures/music_bowser_battle_t3x.h"
 #include "src/minimap/textures/music_dire_dire_docks_t3x.h"

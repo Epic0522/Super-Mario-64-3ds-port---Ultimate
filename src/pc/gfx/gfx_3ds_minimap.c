@@ -7,14 +7,18 @@
 #include "audio/external.h"
 #include "game/area.h"
 #include "game/game_init.h"
+#include "game/geo_misc.h"
 #include "game/ingame_menu.h"
+#include "game/memory.h"
 #include "game/screen_transition.h"
 #include "game/segment2.h"
 #include "game/segment7.h"
 #include "game/level_update.h"
+#include "menu/file_select.h"
 #include "menu/intro_geo.h"
 #include "menu/level_select_menu.h"
 #include "menu/star_select.h"
+#include "level_table.h"
 #include "seq_ids.h"
 
 static C3D_Mtx modelView, projBottom;
@@ -35,9 +39,12 @@ static C3D_Tex hud_red_coin_tex[4];
 static C3D_Tex hud_digit_tex[10];
 static C3D_Tex title_1996_nintendo_tex;
 static C3D_Tex title_press_start_tex;
+static C3D_Tex title_press_home_tex;
 static C3D_Tex transition_tex[4];
 static C3D_Tex music_title_tex[SEQ_COUNT];
 static u16 music_title_width[SEQ_COUNT];
+static C3D_Tex credits_font_tex[256];
+static bool credits_font_tex_loaded[256];
 
 static float mario_x, mario_y, mario_direction = 0.0f;
 static bool cached_minimap_frame_valid = false;
@@ -57,9 +64,16 @@ static u8 sBottomTransitionLastType = 0xFF;
 static u8 sBottomTransitionStepGate = 0;
 static u16 sStarSelectPressStartTimer = 0;
 static bool sTransitionTexLoaded = false;
+static struct CreditsEntry *sBottomCreditsLastEntry = NULL;
+static u8 sBottomCreditsFadeTimer = 0;
+static u16 sCakeEndPressHomeTimer = 0;
 
 static bool gfx_3ds_minimap_is_star_select(void);
+static bool gfx_3ds_minimap_is_staff_roll(void);
 static void gfx_3ds_minimap_draw_star_select(float *vbo_buffer);
+static void gfx_3ds_minimap_draw_staff_roll(float *vbo_buffer);
+static void gfx_3ds_minimap_draw_cake_end_screen(float *vbo_buffer);
+static void gfx_3ds_minimap_draw_music_title(float *vbo_buffer);
 
 static uint32_t rgb_to_abgr(uint32_t rgb)
 {
@@ -863,10 +877,42 @@ static bool gfx_3ds_minimap_transition_holds_frame(void)
         || (gN3dsBottomTransitionActive && gN3dsBottomTransitionDelay <= 0);
 }
 
+static bool gfx_3ds_minimap_transition_is_fully_black(void)
+{
+    if (gWarpTransition.pauseRendering)
+        return true;
+
+    if (!gN3dsBottomTransitionActive || gN3dsBottomTransitionDelay > 0)
+        return false;
+
+    if (!(gN3dsBottomTransitionType & 1))
+        return false;
+
+    return gN3dsBottomTransitionFrame + 1 >= gN3dsBottomTransitionTime;
+}
+
+static bool gfx_3ds_minimap_is_file_select_exit_transition(void)
+{
+    return gN3dsFileSelectExiting
+        && gN3dsBottomTransitionActive
+        && gN3dsBottomTransitionDelay <= 0
+        && gN3dsBottomTransitionType == WARP_TRANSITION_FADE_INTO_COLOR
+        && gN3dsBottomTransitionRed == 0xFF
+        && gN3dsBottomTransitionGreen == 0xFF
+        && gN3dsBottomTransitionBlue == 0xFF;
+}
+
 static void gfx_3ds_minimap_draw_transition_screen(float *vbo_buffer)
 {
     if (gfx_3ds_minimap_is_star_select()) {
         gfx_3ds_minimap_draw_star_select(vbo_buffer);
+        gfx_3ds_minimap_draw_bottom_transition(vbo_buffer);
+        return;
+    } else if (gfx_3ds_minimap_is_staff_roll()) {
+        gfx_3ds_minimap_draw_staff_roll(vbo_buffer);
+        gfx_3ds_minimap_draw_bottom_transition(vbo_buffer);
+        gfx_3ds_minimap_draw_music_title(vbo_buffer);
+        return;
     } else if ((gN3dsBottomTransitionType & 1) && show_minimap && minimap_tex_loaded) {
         sStarSelectPressStartTimer = 0;
         gfx_3ds_minimap_draw_cached_frame(vbo_buffer);
@@ -876,7 +922,17 @@ static void gfx_3ds_minimap_draw_transition_screen(float *vbo_buffer)
     } else {
         sStarSelectPressStartTimer = 0;
         gfx_3ds_minimap_draw_background_color_rgb(vbo_buffer, 0x000000);
+        if (gfx_3ds_minimap_is_file_select_exit_transition()) {
+            gfx_3ds_minimap_draw_music_title(vbo_buffer);
+            gfx_3ds_minimap_draw_bottom_transition(vbo_buffer);
+            return;
+        }
+        if (!minimap_is_level_select_preview_active())
+            gfx_3ds_minimap_draw_music_title(vbo_buffer);
+        return;
     }
+    if (!minimap_is_level_select_preview_active())
+        gfx_3ds_minimap_draw_music_title(vbo_buffer);
     gfx_3ds_minimap_draw_bottom_transition(vbo_buffer);
 }
 
@@ -926,12 +982,267 @@ static void gfx_3ds_minimap_draw_music_title_alpha(float *vbo_buffer, u8 alpha)
                                          316.0f - (float) width, 3.0f, alpha);
 }
 
+static bool gfx_3ds_minimap_load_credits_glyph(u8 glyph)
+{
+    void **fontLUT;
+    const u8 *src;
+    u8 rgba[8 * 8 * 4];
+    u32 swizzled[8 * 8];
+    u32 x;
+    u32 y;
+
+    if (credits_font_tex_loaded[glyph])
+        return true;
+
+    fontLUT = segmented_to_virtual(main_credits_font_lut);
+    src = fontLUT[glyph];
+    if (src == NULL)
+        return false;
+
+    for (y = 0; y < 8; y++) {
+        for (x = 0; x < 8; x++) {
+            u32 srcIndex = (y * 8 + x) * 2;
+            u32 dstIndex = (y * 8 + x) * 4;
+            u16 color = ((u16) src[srcIndex] << 8) | src[srcIndex + 1];
+        u8 red = ((color >> 11) & 0x1F) * 255 / 31;
+        u8 green = ((color >> 6) & 0x1F) * 255 / 31;
+        u8 blue = ((color >> 1) & 0x1F) * 255 / 31;
+        u8 alpha = (color & 1) ? 255 : 0;
+
+            rgba[dstIndex + 0] = red;
+            rgba[dstIndex + 1] = green;
+            rgba[dstIndex + 2] = blue;
+            rgba[dstIndex + 3] = alpha;
+        }
+    }
+
+    gfx_3ds_minimap_swizzle_rgba8(rgba, swizzled, 8, 8);
+    if (!C3D_TexInit(&credits_font_tex[glyph], 8, 8, GPU_RGBA8))
+        return false;
+
+    C3D_TexUpload(&credits_font_tex[glyph], swizzled);
+    C3D_TexFlush(&credits_font_tex[glyph]);
+    C3D_TexSetFilter(&credits_font_tex[glyph], GPU_NEAREST, GPU_NEAREST);
+    C3D_TexSetWrap(&credits_font_tex[glyph], GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
+    credits_font_tex_loaded[glyph] = true;
+    return true;
+}
+
+static s16 gfx_3ds_minimap_get_credits_str_width(const char *str)
+{
+    s16 width = 0;
+
+    while (*str != '\0') {
+        width += (*str == ' ') ? 4 : 7;
+        str++;
+    }
+
+    return width;
+}
+
+static s16 gfx_3ds_minimap_max_s16(s16 a, s16 b)
+{
+    return a > b ? a : b;
+}
+
+static s16 gfx_3ds_minimap_min_s16(s16 a, s16 b)
+{
+    return a < b ? a : b;
+}
+
+static void gfx_3ds_minimap_draw_credits_str(float *vbo_buffer, s16 x, s16 y,
+                                             const char *str, u8 alpha)
+{
+    while (*str != '\0') {
+        if (*str == ' ') {
+            x += 4;
+        } else {
+            u8 glyph = ascii_to_credits_char(*str);
+            if (gfx_3ds_minimap_load_credits_glyph(glyph)) {
+                gfx_3ds_minimap_draw_tex_sized_alpha(vbo_buffer, &credits_font_tex[glyph],
+                                                     8.0f, 8.0f, (float) x, (float) y, alpha);
+            }
+            x += 7;
+        }
+        str++;
+    }
+}
+
+static void gfx_3ds_minimap_draw_cake_end_screen(float *vbo_buffer)
+{
+    enum {
+        PRESS_HOME_FADE_FRAMES = 90,
+        PRESS_HOME_BLINK_PERIOD = 32,
+        PRESS_HOME_BLINK_OFF_FRAME = 22,
+    };
+    u8 alpha = 255;
+    u16 blinkTimer = sCakeEndPressHomeTimer;
+
+    gfx_3ds_minimap_draw_background_color_rgb(vbo_buffer, 0x000000);
+
+    if (blinkTimer < PRESS_HOME_FADE_FRAMES) {
+        alpha = (u8) (blinkTimer * 255 / PRESS_HOME_FADE_FRAMES);
+    } else if (((blinkTimer - PRESS_HOME_FADE_FRAMES) % PRESS_HOME_BLINK_PERIOD) >= PRESS_HOME_BLINK_OFF_FRAME) {
+        alpha = 0;
+    }
+
+    if (alpha != 0) {
+        gfx_3ds_minimap_draw_tex_sized_alpha(vbo_buffer, &title_press_home_tex,
+                                             256.0f, 16.0f, 32.0f, 112.0f, alpha);
+    }
+
+    if (sCakeEndPressHomeTimer < 0xFFFF) {
+        sCakeEndPressHomeTimer++;
+    }
+}
+
+static bool gfx_3ds_minimap_is_staff_roll(void)
+{
+    u16 seqArgs = get_current_background_music();
+    u8 seqId = seqArgs & 0x7F;
+
+    return gCurrCreditsEntry != NULL
+        || gN3dsBottomCreditsEntry != NULL
+        || (seqArgs != 0xFFFF && seqId == SEQ_EVENT_CUTSCENE_CREDITS);
+}
+
+static void gfx_3ds_minimap_draw_bottom_credits_entry(float *vbo_buffer)
+{
+    enum {
+        CREDIT_BOTTOM_ORIGINAL_LEFT_X = 21,
+        CREDIT_BOTTOM_ORIGINAL_RIGHT_X = 299,
+        CREDIT_BOTTOM_CENTER_X = 160,
+        CREDIT_BOTTOM_CENTER_Y = 126,
+        CREDIT_BOTTOM_GLYPH_HEIGHT = 8,
+    };
+    struct CreditsEntry *entry = gN3dsBottomCreditsEntry;
+    const char **currStrPtr;
+    const char *titleStr;
+    const char *lineStr;
+    s16 numLines;
+    s16 lineHeight = 16;
+    s16 baseY;
+    s16 strY;
+    s16 minX;
+    s16 maxX;
+    s16 minY;
+    s16 maxY;
+    s16 offsetX;
+    s16 offsetY;
+    s16 width;
+    u8 alpha;
+
+    if (gfx_3ds_minimap_transition_is_fully_black()) {
+        gN3dsBottomCreditsEntry = NULL;
+        entry = NULL;
+    }
+
+    if (entry == NULL) {
+        sBottomCreditsLastEntry = NULL;
+        sBottomCreditsFadeTimer = 0;
+        return;
+    }
+
+    if (entry != sBottomCreditsLastEntry) {
+        sBottomCreditsLastEntry = entry;
+        sBottomCreditsFadeTimer = 0;
+    } else if (sBottomCreditsFadeTimer < 16) {
+        sBottomCreditsFadeTimer++;
+    }
+    alpha = sBottomCreditsFadeTimer >= 16 ? 255 : (u8) (sBottomCreditsFadeTimer * 255 / 16);
+
+    currStrPtr = entry->unk0C;
+    titleStr = *currStrPtr++;
+    numLines = *titleStr++ - '0';
+    baseY = (numLines == 1) * 16;
+    strY = baseY;
+
+    minX = CREDIT_BOTTOM_ORIGINAL_LEFT_X;
+    maxX = CREDIT_BOTTOM_ORIGINAL_LEFT_X + gfx_3ds_minimap_get_credits_str_width(titleStr);
+    minY = strY;
+    maxY = strY + CREDIT_BOTTOM_GLYPH_HEIGHT;
+
+    switch (numLines) {
+        case 4:
+            lineStr = *currStrPtr++;
+            width = gfx_3ds_minimap_get_credits_str_width(lineStr);
+            maxX = gfx_3ds_minimap_max_s16(maxX, CREDIT_BOTTOM_ORIGINAL_LEFT_X + width);
+            maxY = gfx_3ds_minimap_max_s16(maxY, strY + 24 + CREDIT_BOTTOM_GLYPH_HEIGHT);
+            numLines = 2;
+            lineHeight = 24;
+            break;
+        case 5:
+            lineStr = *currStrPtr++;
+            width = gfx_3ds_minimap_get_credits_str_width(lineStr);
+            maxX = gfx_3ds_minimap_max_s16(maxX, CREDIT_BOTTOM_ORIGINAL_LEFT_X + width);
+            maxY = gfx_3ds_minimap_max_s16(maxY, strY + 16 + CREDIT_BOTTOM_GLYPH_HEIGHT);
+            numLines = 3;
+            break;
+    }
+
+    while (numLines-- > 0) {
+        const char *name = *currStrPtr++;
+        width = gfx_3ds_minimap_get_credits_str_width(name);
+        minX = gfx_3ds_minimap_min_s16(minX, CREDIT_BOTTOM_ORIGINAL_RIGHT_X - width);
+        maxX = gfx_3ds_minimap_max_s16(maxX, CREDIT_BOTTOM_ORIGINAL_RIGHT_X);
+        maxY = gfx_3ds_minimap_max_s16(maxY, strY + CREDIT_BOTTOM_GLYPH_HEIGHT);
+        strY += lineHeight;
+    }
+
+    offsetX = CREDIT_BOTTOM_CENTER_X - (minX + maxX) / 2;
+    offsetY = CREDIT_BOTTOM_CENTER_Y - (minY + maxY) / 2;
+
+    currStrPtr = entry->unk0C;
+    titleStr = *currStrPtr++;
+    numLines = *titleStr++ - '0';
+    lineHeight = 16;
+    strY = baseY + offsetY;
+
+    gfx_3ds_minimap_draw_credits_str(vbo_buffer,
+                                     CREDIT_BOTTOM_ORIGINAL_LEFT_X + offsetX,
+                                     strY, titleStr, alpha);
+
+    switch (numLines) {
+        case 4:
+            lineStr = *currStrPtr++;
+            gfx_3ds_minimap_draw_credits_str(vbo_buffer,
+                                             CREDIT_BOTTOM_ORIGINAL_LEFT_X + offsetX,
+                                             strY + 24, lineStr, alpha);
+            numLines = 2;
+            lineHeight = 24;
+            break;
+        case 5:
+            lineStr = *currStrPtr++;
+            gfx_3ds_minimap_draw_credits_str(vbo_buffer,
+                                             CREDIT_BOTTOM_ORIGINAL_LEFT_X + offsetX,
+                                             strY + 16, lineStr, alpha);
+            numLines = 3;
+            break;
+    }
+
+    while (numLines-- > 0) {
+        const char *name = *currStrPtr++;
+        gfx_3ds_minimap_draw_credits_str(vbo_buffer,
+                                         CREDIT_BOTTOM_ORIGINAL_RIGHT_X + offsetX
+                                             - gfx_3ds_minimap_get_credits_str_width(name),
+                                         strY, name, alpha);
+        strY += lineHeight;
+    }
+}
+
 static bool gfx_3ds_minimap_is_star_select(void)
 {
     u16 seqArgs = get_current_background_music();
     u8 seqId = seqArgs & 0x7F;
 
     return gN3dsStarSelectActive || (seqArgs != 0xFFFF && seqId == SEQ_MENU_STAR_SELECT);
+}
+
+static void gfx_3ds_minimap_draw_staff_roll(float *vbo_buffer)
+{
+    sStarSelectPressStartTimer = 0;
+    gfx_3ds_minimap_draw_background_color_rgb(vbo_buffer, 0x000000);
+    gfx_3ds_minimap_draw_bottom_credits_entry(vbo_buffer);
 }
 
 static void gfx_3ds_minimap_draw_star_select(float *vbo_buffer)
@@ -1043,6 +1354,7 @@ void gfx_3ds_init_minimap()
     gfx_3ds_minimap_load_hud_texture(&hud_digit_tex[9], hud_digit_9_t3x, hud_digit_9_t3x_size);
     gfx_3ds_minimap_load_hud_texture(&title_1996_nintendo_tex, title_1996_nintendo_t3x, title_1996_nintendo_t3x_size);
     gfx_3ds_minimap_load_hud_texture(&title_press_start_tex, title_press_start_t3x, title_press_start_t3x_size);
+    gfx_3ds_minimap_load_hud_texture(&title_press_home_tex, title_press_home_t3x, title_press_home_t3x_size);
     gfx_3ds_minimap_load_transition_textures();
 
     gfx_3ds_minimap_load_hud_texture(&music_title_tex[SEQ_SOUND_PLAYER], music_silence_t3x, music_silence_t3x_size);
@@ -1126,7 +1438,30 @@ uint32_t gfx_3ds_draw_minimap(float *vertex_buffer, int vertex_offset)
     buffer_offset = vertex_offset;
 
     if (gN3dsIntroScreenMode >= 0) {
+        if (gN3dsIntroScreenExiting && gfx_3ds_minimap_transition_holds_frame()) {
+            gfx_3ds_minimap_draw_transition_screen(vertex_buffer);
+            return buffer_offset - vertex_offset;
+        }
         gfx_3ds_minimap_draw_intro_title(vertex_buffer);
+        return buffer_offset - vertex_offset;
+    }
+
+    if (gCurrLevelNum == LEVEL_ENDING) {
+        sStarSelectPressStartTimer = 0;
+        gfx_3ds_minimap_draw_cake_end_screen(vertex_buffer);
+        return buffer_offset - vertex_offset;
+    }
+    gN3dsCakeEndScreenActive = FALSE;
+    sCakeEndPressHomeTimer = 0;
+
+    if (gfx_3ds_minimap_is_staff_roll()) {
+        if (gfx_3ds_minimap_transition_holds_frame()) {
+            gfx_3ds_minimap_draw_transition_screen(vertex_buffer);
+        } else {
+            gfx_3ds_minimap_draw_staff_roll(vertex_buffer);
+            gfx_3ds_minimap_draw_bottom_transition(vertex_buffer);
+        }
+        gfx_3ds_minimap_draw_music_title(vertex_buffer);
         return buffer_offset - vertex_offset;
     }
 
