@@ -2186,7 +2186,6 @@ static u8 dynamic_shadow_behavior_is_platform_shadow_caster_allowed(
         || behavior == segmented_to_virtual(bhvLllFloatingWoodBridge)
         || behavior == segmented_to_virtual(bhvLllRotatingHexagonalRing)
         || behavior == segmented_to_virtual(bhvLllHexagonalMesh)
-        || behavior == segmented_to_virtual(bhvLllBowserPuzzlePiece)
         || behavior == segmented_to_virtual(bhvLllDrawbridge)
         || behavior == segmented_to_virtual(bhvWfSlidingPlatform)
         || behavior == segmented_to_virtual(bhvRrCruiserWing)
@@ -2197,7 +2196,6 @@ static u8 dynamic_shadow_behavior_is_platform_shadow_caster_allowed(
         || behavior == segmented_to_virtual(bhvLllVolcanoFallingTrap)
         || behavior == segmented_to_virtual(bhvLllRollingLog)
         || behavior == segmented_to_virtual(bhvControllablePlatform)
-        || behavior == segmented_to_virtual(bhvControllablePlatformSub)
         || behavior == segmented_to_virtual(bhvSeesawPlatform)
         || behavior == segmented_to_virtual(bhvPlatformOnTrack)
         || behavior == segmented_to_virtual(bhvFerrisWheelAxle)
@@ -2433,7 +2431,7 @@ static u8 dynamic_shadow_is_model_object_far(void) {
         if (dy > 2200.0f || dy < -2200.0f) {
             return TRUE;
         }
-    } else if (!dynamic_shadow_is_mario_object() && (dy > 900.0f || dy < -1800.0f)) {
+    } else if (!dynamic_shadow_is_mario_object() && (dy > 1400.0f || dy < -1800.0f)) {
         return TRUE;
     }
     if (dynamic_shadow_is_mario_object() && (dy > 1400.0f || dy < -2400.0f)) {
