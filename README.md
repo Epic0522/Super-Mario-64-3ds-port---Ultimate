@@ -35,11 +35,11 @@ git clone --filter=blob:none --sparse https://github.com/Epic0522/Super-Mario-64
 
 - **Platform target:** Nintendo 3DS, with both `.3dsx` and `.cia` outputs.
 - **Signature additions:** bottom-screen minimap and HUD, synchronized lower-screen transitions, hybrid official/free camera control, dynamic shadows, death ragdoll behavior, and optional debug utilities.
-- **Persistent options:** 3DS anti-aliasing, 400px/800px display mode, and camera tuning are saved in `sm64config.txt`.
+- **Persistent options:** 3DS anti-aliasing, 400px/800px display mode, dynamic shadows, death ragdoll, hit ragdoll, and camera tuning are saved in `sm64config.txt`.
 
 - **対象プラットフォーム：** Nintendo 3DS。`.3dsx` と `.cia` の両方を出力できます。
 - **主な追加要素：** 下画面ミニマップと HUD、同期した下画面トランジション、公式/自由カメラのハイブリッド操作、動的シャドウ、ラグドール。
-- **保存される設定：** 3DS アンチエイリアス、400px/800px 表示モード、カメラ設定は `sm64config.txt` に保存されます。
+- **保存される設定：** 3DS アンチエイリアス、400px/800px 表示モード、動的シャドウ、死亡ラグドール、受撃ラグドール、カメラ設定は `sm64config.txt` に保存されます。
 
 
 During development, a small number of generated asset-side files were intentionally patched for project behavior or presentation. Because `extract_assets.py` can overwrite these files, the project keeps mirrored replacements under `project_asset_overrides/`. After local extraction, copy that directory back into the repository root so the patched versions replace the freshly generated ones:
@@ -177,9 +177,9 @@ When debug mode is enabled from the lower-screen menu, these 3DS shortcuts becom
 
 ## 🔧Configuration and Save Data / 設定とセーブデータ
 
-The main configuration file is `sm64config.txt`. It stores controls, Puppycam values, dynamic shadow preference, and the 3DS anti-aliasing / wide-mode choices.
+The main configuration file is `sm64config.txt`. It stores controls, Puppycam values, dynamic shadow preference, death ragdoll preference, hit ragdoll preference, and the 3DS anti-aliasing / wide-mode choices.
 
-メイン設定ファイルは `sm64config.txt` です。操作設定、Puppycam の値、動的シャドウ設定、3DS のアンチエイリアス/ワイドモード選択を保存します。
+メイン設定ファイルは `sm64config.txt` です。操作設定、Puppycam の値、動的シャドウ設定、死亡ラグドール設定、受撃ラグドール設定、3DS のアンチエイリアス/ワイドモード選択を保存します。
 
 For `.3dsx` builds, configuration and save data are stored beside the `.3dsx` file. For `.cia` builds, configuration and save data are stored at the SD card root.
 
@@ -195,14 +195,33 @@ Place a matching baserom in the repository root before building, for example `ba
 
 ビルド前に、対応する baserom をリポジトリのルートに配置してください。たとえば US 版では `baserom.us.z64` を使用します。他の対応リージョンをビルドする場合は、`VERSION=us` を `eu`、`jp`、`sh` に変更してください。
 
-For a normal 3DS build environment, export `DEVKITPRO` and `DEVKITARM` first so the Makefile can find the devkitPro toolchain. The examples below assume the common macOS/Linux install path:
+From a clean release checkout, you do not need to run `extract_assets.py` manually. The first `make` automatically builds the required host tools and extracts ROM-backed assets into ignored local files before compiling.
 
-通常の 3DS ビルド環境では、Makefile が devkitPro ツールチェーンを見つけられるように、先に `DEVKITPRO` と `DEVKITARM` を設定してください。以下の例では、一般的な macOS/Linux のインストールパスを想定しています：
+クリーンな配布版チェックアウトから始める場合、`extract_assets.py` を手動で実行する必要はありません。最初の `make` が必要なホストツールのビルドと、ROM 由来アセットの抽出を自動で行ってからコンパイルします。
+
+For a normal 3DS build environment, export `DEVKITPRO` and `DEVKITARM` first so the Makefile can find the devkitPro toolchain. If `bannertool` is not installed globally, also export `BANNERTOOL` to its full path. The examples below assume the common macOS/Linux install path:
+
+通常の 3DS ビルド環境では、Makefile が devkitPro ツールチェーンを見つけられるように、先に `DEVKITPRO` と `DEVKITARM` を設定してください。`bannertool` がグローバルに入っていない場合は、そのフルパスを `BANNERTOOL` に設定してください。以下の例では、一般的な macOS/Linux のインストールパスを想定しています：
 
 ```sh
 export DEVKITPRO=/opt/devkitpro
 export DEVKITARM=/opt/devkitpro/devkitARM
 ```
+
+Recommended zero-start `.3dsx` build command on macOS:
+
+macOS での「ゼロからの」推奨 `.3dsx` ビルドコマンド：
+
+```sh
+PATH="/opt/devkitpro/tools/bin:$PATH" \
+DEVKITPRO=/opt/devkitpro \
+DEVKITARM=/opt/devkitpro/devkitARM \
+make -j$(sysctl -n hw.ncpu)
+```
+
+If you keep `bannertool` outside of `PATH`, append `BANNERTOOL=/path/to/bannertool` to the same command line.
+
+`bannertool` を `PATH` 外に置いている場合は、同じコマンドラインに `BANNERTOOL=/path/to/bannertool` を追加してください。
 
 After changing build flags, run `make clean` before rebuilding so the new flags are applied consistently.
 
@@ -213,7 +232,7 @@ Build a Homebrew Launcher `.3dsx` (output: `build/us_3ds/sm64.us.aev64u6.3dsx`):
 Homebrew Launcher 用の `.3dsx` をビルドします（出力先：`build/us_3ds/sm64.us.aev64u6.3dsx`）：
 
 ```sh
-DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us -j$(sysctl -n hw.ncpu)
+PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us -j$(sysctl -n hw.ncpu)
 ```
 
 Build an installable `.cia` (output: `build/us_3ds/sm64.us.aev64u6.cia`):
@@ -221,7 +240,7 @@ Build an installable `.cia` (output: `build/us_3ds/sm64.us.aev64u6.cia`):
 インストール可能な `.cia` をビルドします（出力先：`build/us_3ds/sm64.us.aev64u6.cia`）：
 
 ```sh
-DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us cia -j$(sysctl -n hw.ncpu)
+PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM BANNERTOOL=/path/to/bannertool make VERSION=us cia -j$(sysctl -n hw.ncpu)
 ```
 
 Clean previous outputs:
@@ -237,7 +256,7 @@ Build with the legacy 3DS frame-skip option:
 旧来の 3DS フレームスキップオプションを有効にしてビルドします：
 
 ```sh
-DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us ENABLE_N3DS_FRAMESKIP=1 -j$(sysctl -n hw.ncpu)
+PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us ENABLE_N3DS_FRAMESKIP=1 -j$(sysctl -n hw.ncpu)
 ```
 
 Disable audio for a test build:
@@ -245,7 +264,7 @@ Disable audio for a test build:
 テストビルド用に音声を無効化します：
 
 ```sh
-DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us DISABLE_AUDIO=1 -j$(sysctl -n hw.ncpu)
+PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us DISABLE_AUDIO=1 -j$(sysctl -n hw.ncpu)
 ```
 
 Use the PC port's reference RSP audio path:
@@ -253,7 +272,7 @@ Use the PC port's reference RSP audio path:
 PC ポート版の参照 RSP 音声経路を使用します：
 
 ```sh
-DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us FORCE_REFERENCE_RSPA=1 -j$(sysctl -n hw.ncpu)
+PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us FORCE_REFERENCE_RSPA=1 -j$(sysctl -n hw.ncpu)
 ```
 
 Disable the enhanced RSP audio performance path while keeping the 3DS mixer:
@@ -261,7 +280,7 @@ Disable the enhanced RSP audio performance path while keeping the 3DS mixer:
 3DS ミキサーを維持したまま、強化 RSP 音声の高速経路を無効化します：
 
 ```sh
-DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us DISABLE_ENHANCED_RSPA=1 -j$(sysctl -n hw.ncpu)
+PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us DISABLE_ENHANCED_RSPA=1 -j$(sysctl -n hw.ncpu)
 ```
 
 Use accurate audio math where supported:
@@ -269,7 +288,7 @@ Use accurate audio math where supported:
 対応している音声実装で、より正確な演算挙動を使用します：
 
 ```sh
-DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us AUDIO_USE_ACCURATE_MATH=1 -j$(sysctl -n hw.ncpu)
+PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us AUDIO_USE_ACCURATE_MATH=1 -j$(sysctl -n hw.ncpu)
 ```
 
 The 3DS toolchain expects devkitPro/devkitARM and the usual 3DS build tools such as `3dsxtool`, `smdhtool`, `tex3ds`, and `makerom`. Docker, Linux/WSL, and MSYS2 setups are all viable if the devkitPro environment is installed correctly.
@@ -287,9 +306,9 @@ To change CIA presentation assets, update `3ds/icon.png` and `3ds/banner.png`, t
 
 CIA の表示用アセットを変更する場合は、`3ds/icon.png` と `3ds/banner.png` を更新し、`bannertool` で CIA アイコンとバナーアセットを再生成してください。
 
-If `bannertool` is not installed globally, the Makefile will also accept a local build at `/tmp/3ds-bannertool/build/bannertool`.
+If `bannertool` is not installed globally, point the `BANNERTOOL` environment variable at any local `bannertool` executable before building `.cia`.
 
-`bannertool` がグローバルにインストールされていない場合でも、Makefile は `/tmp/3ds-bannertool/build/bannertool` にあるローカルビルド版を使用できます。
+`bannertool` がグローバルにインストールされていない場合は、`.cia` をビルドする前に、任意のローカル `bannertool` 実行ファイルを `BANNERTOOL` 環境変数で指定してください。
 
 ## 🗺️Minimap Tooling / ミニマップ用ツール
 
