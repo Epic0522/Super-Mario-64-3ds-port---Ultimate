@@ -88,7 +88,6 @@ static const struct N3dsRuntimeLevelSelectEntry sN3dsRuntimeLevelSelectEntries[]
     { LEVEL_THI, 1, 0x0A, "THI" },
     { LEVEL_TTC, 1, 0x0A, "TTC" },
     { LEVEL_RR, 1, 0x0A, "RR" },
-    { LEVEL_CASTLE_COURTYARD, 1, 0x0A, "CY" },
     { LEVEL_PSS, 1, 0x0A, "PSS" },
     { LEVEL_COTMC, 1, 0x0A, "COTMC" },
     { LEVEL_TOTWC, 1, 0x0A, "TOTWC" },
@@ -114,6 +113,24 @@ static s8 sN3dsRuntimeLevelSelectStickLatch = FALSE;
 void set_play_mode(s16 playMode);
 void fade_into_special_warp(u32 arg, u32 color);
 void initiate_warp(s16 destLevel, s16 destArea, s16 destWarpNode, s32 arg3);
+
+static u8 n3ds_final_bowser_credits_shortcut_update(void) {
+    if (!death_ragdoll_debug_is_enabled() || gCurrLevelNum != LEVEL_BOWSER_3) {
+        return FALSE;
+    }
+
+    if (gMarioState == NULL || gWarpTransition.isActive || sDelayedWarpOp != WARP_OP_NONE) {
+        return FALSE;
+    }
+
+    if (gDeathRagdollDebugZlHeld && gDeathRagdollDebugZrHeld && gN3dsPhysicalStartPressed) {
+        level_trigger_warp(gMarioState, WARP_OP_CREDITS_START);
+        gN3dsPhysicalStartPressed = FALSE;
+        return TRUE;
+    }
+
+    return FALSE;
+}
 
 static s16 n3ds_runtime_level_select_find_index(s16 level) {
     s16 i;
@@ -156,6 +173,12 @@ static void n3ds_runtime_level_select_set_preview(u8 active) {
         return;
     }
 
+    if (sN3dsRuntimeLevelSelectIndex < 0) {
+        sN3dsRuntimeLevelSelectIndex = 0;
+    }
+    if (sN3dsRuntimeLevelSelectIndex >= (s16) N3DS_RUNTIME_LEVEL_SELECT_COUNT) {
+        sN3dsRuntimeLevelSelectIndex = (s16) N3DS_RUNTIME_LEVEL_SELECT_COUNT - 1;
+    }
     entry = &sN3dsRuntimeLevelSelectEntries[sN3dsRuntimeLevelSelectIndex];
     minimap_set_level_select_preview(true, entry->level, entry->area);
 }
@@ -1175,6 +1198,10 @@ void basic_update(UNUSED s16 *arg) {
 
 s32 play_mode_normal(void) {
 #ifdef TARGET_N3DS
+    if (n3ds_final_bowser_credits_shortcut_update()) {
+        return 0;
+    }
+
     if (level_select_button_pressed) {
         level_select_button_pressed = FALSE;
         sN3dsRuntimeLevelSelectIndex = n3ds_runtime_level_select_find_index(gCurrLevelNum);

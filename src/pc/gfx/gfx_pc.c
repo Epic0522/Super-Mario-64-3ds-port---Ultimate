@@ -907,27 +907,30 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx *verti
         // trivial clip rejection
         d->clip_rej = 0;
 #ifdef TARGET_N3DS
-    if (gGfx3DEnabled) {
-        float wMod = w * 1.2f; // expanded w-range for testing clip rejection
-        if (x < -wMod) d->clip_rej |= 1;
-        if (x > wMod) d->clip_rej |= 2;
-        if (y < -wMod) d->clip_rej |= 4;
-        if (y > wMod) d->clip_rej |= 8;
-    }
-    else {
-        if (x < -w) d->clip_rej |= 1;
-        if (x > w) d->clip_rej |= 2;
-        if (y < -w) d->clip_rej |= 4;
-        if (y > w) d->clip_rej |= 8;
-    }
+        if (!dynamic_shadow_material && dynamic_shadow_pass != DYNAMIC_SHADOW_GFX_PASS_DEPTH) {
+            if (gGfx3DEnabled) {
+                float wMod = w * 1.2f; // expanded w-range for testing clip rejection
+                if (x < -wMod) d->clip_rej |= 1;
+                if (x > wMod) d->clip_rej |= 2;
+                if (y < -wMod) d->clip_rej |= 4;
+                if (y > wMod) d->clip_rej |= 8;
+            } else {
+                if (x < -w) d->clip_rej |= 1;
+                if (x > w) d->clip_rej |= 2;
+                if (y < -w) d->clip_rej |= 4;
+                if (y > w) d->clip_rej |= 8;
+            }
+            if (z < -w) d->clip_rej |= 16;
+            if (z > w) d->clip_rej |= 32;
+        }
 #else
         if (x < -w) d->clip_rej |= 1;
         if (x > w) d->clip_rej |= 2;
         if (y < -w) d->clip_rej |= 4;
         if (y > w) d->clip_rej |= 8;
-#endif
         if (z < -w) d->clip_rej |= 16;
         if (z > w) d->clip_rej |= 32;
+#endif
 
         d->x = x;
         d->y = y;

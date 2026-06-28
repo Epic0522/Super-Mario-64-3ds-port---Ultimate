@@ -12,6 +12,9 @@ enum FlyingCarpetState
 };
 
 extern s8 gFlyingCarpetState;
+#ifdef TARGET_N3DS
+extern u8 gN3dsCakeEndScreenActive;
+#endif
 
 #ifndef GBI_FLOATS
 extern void make_vertex(

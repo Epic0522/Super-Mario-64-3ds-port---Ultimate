@@ -8,5 +8,9 @@ extern s16 rightstick[2];
 extern u8 camera_mode_button_pressed;
 extern u8 camera_recenter_button_pressed;
 extern u8 level_select_button_pressed;
+extern u8 gN3dsPhysicalStartPressed;
+extern u8 gN3dsPhysicalStartHeld;
+extern u8 gDeathRagdollDebugZrHeld;
+extern u8 gDeathRagdollDebugZlHeld;
 
 #endif

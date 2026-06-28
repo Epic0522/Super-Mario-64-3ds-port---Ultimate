@@ -35,6 +35,9 @@ static s16 sPrevAreaTimer = 0;
 static s16 sFlyingCarpetRippleTimer = 0;
 
 s8 gFlyingCarpetState;
+#ifdef TARGET_N3DS
+u8 gN3dsCakeEndScreenActive = FALSE;
+#endif
 
 /**
  * Create a vertex with the given parameters and insert it into `vtx` at
@@ -202,6 +205,7 @@ Gfx *geo_exec_cake_end_screen(s32 callContext, struct GraphNode *node, UNUSED f3
     if (callContext == GEO_CONTEXT_RENDER) {
         displayList = alloc_display_list(5 * sizeof(*displayList));
         displayListHead = displayList;
+        gN3dsCakeEndScreenActive = TRUE;
 
         generatedNode->fnNode.node.flags = (generatedNode->fnNode.node.flags & 0xFF) | 0x100;
         gDPForceFlush(displayListHead++);

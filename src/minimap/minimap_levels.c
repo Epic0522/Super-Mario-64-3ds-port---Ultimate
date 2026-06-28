@@ -26,7 +26,7 @@ const struct MiniMapInfo level_ssl[] = {
     {ssl_3_t3x, ssl_3_t3x_size, 0x000000, false},
 };
 const struct MiniMapInfo level_bob[] = {
-    {bob_t3x, bob_t3x_size, 0xCCDB4E, false},
+    {bob_t3x, bob_t3x_size, 0x0cae1f, false},
 };
 const struct MiniMapInfo level_sl[] = {
     {sl_1_t3x, sl_1_t3x_size, 0xD4EEFD, false},

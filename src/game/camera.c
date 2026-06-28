@@ -7702,7 +7702,11 @@ BAD_RETURN(s32) cutscene_ending_look_at_sky(struct Camera *c) {
  * called, it will stay at about 37.26f
  */
 BAD_RETURN(s32) cutscene_ending_zoom_fov(UNUSED struct Camera *c) {
+#ifdef TARGET_N3DS
+    sFOVState.fov = 30.f;
+#else
     sFOVState.fov = 37.f;
+#endif
 }
 
 /**
@@ -7711,7 +7715,7 @@ BAD_RETURN(s32) cutscene_ending_zoom_fov(UNUSED struct Camera *c) {
 BAD_RETURN(s32) cutscene_ending_cake_for_mario(struct Camera *c) {
     cutscene_event(cutscene_ending_reset_spline, c, 0, 0);
     cutscene_event(cutscene_ending_look_at_sky, c, 0, 0);
-    cutscene_event(cutscene_ending_zoom_fov, c, 0, 499);
+    cutscene_event(cutscene_ending_zoom_fov, c, 0, -1);
     cutscene_event(cutscene_ending_look_at_sky, c, 500, -1);
     cutscene_spawn_obj(8, 600);
     cutscene_spawn_obj(8, 608);

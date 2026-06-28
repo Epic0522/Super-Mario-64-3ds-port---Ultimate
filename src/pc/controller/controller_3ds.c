@@ -49,6 +49,8 @@ u8 gDeathRagdollDebugZrPressed;
 u8 gDeathRagdollDebugZlPressed;
 u8 gDeathRagdollDebugZrHeld;
 u8 gDeathRagdollDebugZlHeld;
+u8 gN3dsPhysicalStartPressed;
+u8 gN3dsPhysicalStartHeld;
 
 static int button_mapping[10][2];
 static u32 camera_control_keys_prev;
@@ -83,6 +85,8 @@ static u32 controller_3ds_get_held(void)
     gDeathRagdollDebugZlPressed = (kPressed & KEY_ZL) != 0;
     gDeathRagdollDebugZrHeld = (kHeld & KEY_ZR) != 0;
     gDeathRagdollDebugZlHeld = (kHeld & KEY_ZL) != 0;
+    gN3dsPhysicalStartPressed = (kPressed & KEY_START) != 0;
+    gN3dsPhysicalStartHeld = (kHeld & KEY_START) != 0;
     camera_control_keys_prev = kHeld;
     if (levelSelectRequested) {
         level_select_button_pressed |= (kPressed & (KEY_ZL | KEY_ZR | KEY_SELECT)) != 0;

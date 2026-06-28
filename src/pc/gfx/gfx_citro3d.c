@@ -16,6 +16,10 @@
 #include "gfx_citro3d.h"
 #include "color_conversion.h"
 #include "enhancements/dynamic_shadows.h"
+#include "audio/external.h"
+#include "game/area.h"
+#include "game/level_update.h"
+#include "seq_ids.h"
 
 #define TEXTURE_POOL_SIZE 4096
 #define FOG_LUT_SIZE 32
@@ -165,6 +169,15 @@ static void clear_buffers()
     if (clear_bottom)
         C3D_RenderTargetClear(gTargetBottom, (C3D_ClearBits) clear_bottom, screen_clear_colors.struc.bottom,
                               DYNAMIC_SHADOW_CLEAR_DEPTH_STENCIL);
+}
+
+static bool gfx_citro3d_should_clear_staff_roll_top(void)
+{
+    u16 seqArgs = get_current_background_music();
+    u8 seqId = seqArgs & 0x7F;
+
+    return gCurrCreditsEntry != NULL
+        || (seqArgs != 0xFFFF && seqId == SEQ_EVENT_CUTSCENE_CREDITS);
 }
 
 void stereoTilt(C3D_Mtx* mtx, float z, float w)
@@ -1256,6 +1269,8 @@ static void gfx_citro3d_start_frame(void)
     // Due to hardware differences, the PC port always clears the depth buffer,
     // rather than just when the N64 would clear it.
     gfx_citro3d_set_viewport_clear_buffer(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_DEPTH);
+    if (gfx_citro3d_should_clear_staff_roll_top())
+        gfx_citro3d_set_viewport_clear_buffer(VIEW_MAIN_SCREEN, VIEW_CLEAR_BUFFER_COLOR);
 
     clear_buffers();
 

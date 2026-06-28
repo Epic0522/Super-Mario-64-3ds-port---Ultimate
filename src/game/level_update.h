@@ -61,6 +61,9 @@ struct CreditsEntry
 };
 
 extern struct CreditsEntry *gCurrCreditsEntry;
+#ifdef TARGET_N3DS
+extern struct CreditsEntry *gN3dsBottomCreditsEntry;
+#endif
 
 extern struct MarioState gMarioStates[];
 extern struct MarioState *gMarioState;
