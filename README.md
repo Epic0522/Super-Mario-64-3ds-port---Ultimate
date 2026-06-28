@@ -83,8 +83,8 @@ The files currently preserved in that override pack are:
 - **Integrated lower-screen HUD.** Lives, stars, coins, red coin sprites, and the current BGM title are laid out as a persistent bottom-screen HUD for quick reference without occupying the main gameplay view.
   **統合された下画面 HUD。** 残機数、スター数、コイン数、赤コインのスプライト、現在の BGM タイトルを常時表示の下画面 HUD として配置し、メインのゲーム画面を占有せずに素早く確認できます。
 
-- **Touch mini-menu.** A full-screen touch trigger opens a centered control panel with anti-aliasing, resolution, debug, hide-menu, and exit actions. The menu is forcibly closed or disabled in scenes where mixed rendering would cause conflicts.
-  **タッチメニュー。** 下画面全体のタッチ操作で中央配置の操作パネルを開き、アンチエイリアス、解像度、debug、メニュー非表示、終了を操作できます。混合レンダリングの競合が起きやすい場面では、メニューは強制的に閉じられるか無効化されます。
+- **Touch mini-menu.** A full-screen touch trigger opens a centered lower-screen control panel. The root menu provides anti-aliasing, resolution, debug, `Enh`, hide-menu, and exit actions; `Enh` opens a second page for dynamic shadows, death ragdoll, and hit ragdoll toggles. The menu is forcibly closed or disabled in scenes where mixed rendering would cause conflicts, and every reopen starts from the root page.
+  **タッチメニュー。** 下画面全体のタッチ操作で中央配置の操作パネルを開きます。ルートメニューではアンチエイリアス、解像度、debug、`Enh`、メニュー非表示、終了を操作でき、`Enh` からは動的シャドウ、死亡ラグドール、受撃ラグドールの切り替えページに入れます。混合レンダリングの競合が起きやすい場面ではメニューは強制的に閉じられるか無効化され、開き直したときは常にルートページから始まります。
 
 ### Camera and Controls / カメラと操作
 
@@ -111,6 +111,9 @@ The files currently preserved in that override pack are:
 - **Death ragdoll system.** Fatal damage can transition Mario into a physics-driven death ragdoll with collision response, wall braking, ledge behavior, squish handling, and a high-angle death camera designed to frame the scene more cleanly.
   **死亡ラグドールシステム。** マリオが致命的なダメージを受けると、物理ベースのラグドール状態へ移行できます。衝突応答、壁ブレーキ、足場端での挙動、押しつぶし処理、シーンを見やすく映す俯瞰カメラを含みます。
 
+- **Hit ragdoll toggle (destructive to vanilla behavior).** The `Enh` submenu can also redirect supported non-lethal knockback reactions into a recoverable ragdoll state. This option is intentionally destructive relative to original SM64 timing and feel, depends on death ragdoll being enabled, and defaults to off.
+  **受撃ラグドール切り替え（原作挙動に対して破壊的）。** `Enh` サブメニューでは、対応する非致死ノックバックを復帰可能なラグドール状態へ置き換える設定も切り替えられます。この機能はオリジナル SM64 の受撃タイミングや感触を意図的に崩す破壊的な変更であり、死亡ラグドール有効時のみ使用でき、初期状態ではオフです。
+
 - **Optional debug mode.** Debug mode is off by default and is not persisted. When enabled from the touch menu, it exposes development/test utilities such as ragdoll visualization, life recovery, manual ragdoll triggering, FPS display support, and an in-place BLJ for high-speed behavior testing.
   **任意で使える debug モード。** Debug は標準でオフで、保存されません。タッチメニューから有効化すると、ラグドール可視化、体力回復、手動ラグドール起動、FPS 表示対応、高速挙動テスト用のその場 BLJ などのテスト機能を利用できます。
 
@@ -134,9 +137,9 @@ The files currently preserved in that override pack are:
 
 ## 🎮Controls and Touch Screen / 操作とタッチ画面
 
-Tap the lower screen to open the mini-menu when the current scene allows it. The menu provides anti-aliasing, resolution mode, debug mode, hide-menu, and exit controls.
+Tap the lower screen to open the mini-menu when the current scene allows it. The root page provides anti-aliasing, resolution mode, debug mode, `Enh`, hide-menu, and exit controls. The `Enh` page contains dynamic shadows, death ragdoll, and hit ragdoll toggles; hit ragdoll is forced off whenever death ragdoll is off.
 
-現在の場面で許可されている場合、下画面をタッチするとミニメニューを開けます。メニューではアンチエイリアス、解像度モード、debug モード、メニュー非表示、ゲーム終了を操作できます。
+現在の場面で許可されている場合、下画面をタッチするとミニメニューを開けます。ルートページではアンチエイリアス、解像度モード、debug モード、`Enh`、メニュー非表示、ゲーム終了を操作できます。`Enh` ページでは動的シャドウ、死亡ラグドール、受撃ラグドールを切り替えられ、死亡ラグドールがオフのときは受撃ラグドールも強制的にオフになります。
 
 On Nintendo 3DS, `X` toggles between the original official camera and the free Puppycam-style camera. `Y` performs a quick recenter action: in free camera it snaps the view back behind Mario, and in official camera it restores a stable Lakitu-style trailing view.
 
@@ -182,9 +185,9 @@ For `.3dsx` builds, configuration and save data are stored beside the `.3dsx` fi
 
 `.3dsx` ビルドでは、設定ファイルとセーブデータは `.3dsx` ファイルと同じディレクトリに保存されます。`.cia` ビルドでは、設定ファイルとセーブデータは SD カードのルートに保存されます。
 
-Useful configuration keys include `dynamic_shadows_enabled`, `n3ds_anti_aliasing`, `n3ds_wide_mode`, `puppycam_sensitivity_x`, `puppycam_sensitivity_y`, `puppycam_invert_x`, `puppycam_invert_y`, `puppycam_stopping_speed`, `puppycam_centre_aggression`, and `puppycam_pan_amount`.
+Useful configuration keys include `dynamic_shadows_enabled`, `death_ragdoll_enabled`, `hit_ragdoll_enabled`, `n3ds_anti_aliasing`, `n3ds_wide_mode`, `puppycam_sensitivity_x`, `puppycam_sensitivity_y`, `puppycam_invert_x`, `puppycam_invert_y`, `puppycam_stopping_speed`, `puppycam_centre_aggression`, and `puppycam_pan_amount`.
 
-よく使う設定キーには、`dynamic_shadows_enabled`、`n3ds_anti_aliasing`、`n3ds_wide_mode`、`puppycam_sensitivity_x`、`puppycam_sensitivity_y`、`puppycam_invert_x`、`puppycam_invert_y`、`puppycam_stopping_speed`、`puppycam_centre_aggression`、`puppycam_pan_amount` があります。
+よく使う設定キーには、`dynamic_shadows_enabled`、`death_ragdoll_enabled`、`hit_ragdoll_enabled`、`n3ds_anti_aliasing`、`n3ds_wide_mode`、`puppycam_sensitivity_x`、`puppycam_sensitivity_y`、`puppycam_invert_x`、`puppycam_invert_y`、`puppycam_stopping_speed`、`puppycam_centre_aggression`、`puppycam_pan_amount` があります。
 
 ## 🏗️Building / ビルド
 

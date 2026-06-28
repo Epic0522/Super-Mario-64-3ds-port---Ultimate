@@ -53,12 +53,15 @@ void death_ragdoll_debug_set_enabled(u8 enabled);
 u8 death_ragdoll_debug_blj_is_active(void);
 u8 death_ragdoll_debug_blj_is_coasting(void);
 u32 death_ragdoll_start(struct MarioState *m, enum DeathRagdollSource source);
+u32 death_ragdoll_start_recoverable(struct MarioState *m, enum DeathRagdollSource source,
+                                    enum DeathRagdollProfile profile, u32 recoverAction);
 u32 death_ragdoll_start_with_profile(struct MarioState *m, enum DeathRagdollSource source,
                                      enum DeathRagdollProfile profile);
 u32 death_ragdoll_try_start_from_health_depleted(struct MarioState *m);
 u32 death_ragdoll_debug_update_shortcut(struct MarioState *m);
 u8 death_ragdoll_consume_death_warp_spawn(void);
 s32 act_death_ragdoll(struct MarioState *m);
+s32 death_ragdoll_step_recoverable(struct MarioState *m);
 Gfx *death_ragdoll_geo_rotate_limb(s32 callContext, struct GraphNode *node, UNUSED Mat4 *mtx);
 Gfx *death_ragdoll_geo_switch_visual(s32 callContext, struct GraphNode *node, UNUSED Mat4 *mtx);
 Gfx *death_ragdoll_geo_render(s32 callContext, struct GraphNode *node, UNUSED Mat4 *mtx);

@@ -192,7 +192,11 @@ bool gfx_3ds_config_menu_can_open(void)
     if (gN3dsBottomTransitionActive && gN3dsBottomTransitionDelay <= 0)
         return false;
 #endif
+    if (seqArgs != 0xFFFF && seqId == SEQ_EVENT_CUTSCENE_CREDITS)
+        return false;
     if (seqArgs != 0xFFFF && seqId == SEQ_MENU_FILE_SELECT)
+        return false;
+    if (gCurrLevelNum == LEVEL_ENDING)
         return false;
 
     return gCurrLevelNum >= LEVEL_MIN && gCurrLevelNum <= LEVEL_MAX;
@@ -218,6 +222,11 @@ static void gfx_3ds_handle_touch() {
         menu_action res = gfx_3ds_menu_on_touch(pos.px, pos.py);
 
         switch (res) {
+            case MENU_CHANGED: {
+                gBottomScreenNeedsRender = true;
+                break;
+            }
+
             case CONFIG_CHANGED: {
                 gBottomScreenNeedsRender = true;
                 deinitialise_screens();

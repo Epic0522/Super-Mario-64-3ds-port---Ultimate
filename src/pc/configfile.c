@@ -77,6 +77,7 @@ unsigned int puppycam_aggression = 35;
 unsigned int puppycam_panlevel = 75;
 unsigned int dynamic_shadows_enabled = 1;
 unsigned int death_ragdoll_enabled = 1;
+unsigned int hit_ragdoll_enabled = 0;
 #ifdef TARGET_N3DS
 unsigned int config3dsAntiAliasing = 1;
 unsigned int config3dsWideMode = 1;
@@ -105,6 +106,7 @@ static const struct ConfigOption options[] = {
     {.name = "puppycam_pan_amount", .type = CONFIG_TYPE_UINT, .uintValue = &puppycam_panlevel},
     {.name = "dynamic_shadows_enabled", .type = CONFIG_TYPE_UINT, .uintValue = &dynamic_shadows_enabled},
     {.name = "death_ragdoll_enabled", .type = CONFIG_TYPE_UINT, .uintValue = &death_ragdoll_enabled},
+    {.name = "hit_ragdoll_enabled", .type = CONFIG_TYPE_UINT, .uintValue = &hit_ragdoll_enabled},
 #ifdef TARGET_N3DS
     {.name = "n3ds_anti_aliasing", .type = CONFIG_TYPE_UINT, .uintValue = &config3dsAntiAliasing},
     {.name = "n3ds_wide_mode", .type = CONFIG_TYPE_UINT, .uintValue = &config3dsWideMode},

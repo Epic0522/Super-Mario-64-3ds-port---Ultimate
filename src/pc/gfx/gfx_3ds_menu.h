@@ -12,6 +12,13 @@
 #include "src/minimap/textures/aa_off_t3x.h"
 #include "src/minimap/textures/debug_on_t3x.h"
 #include "src/minimap/textures/debug_off_t3x.h"
+#include "src/minimap/textures/enh_t3x.h"
+#include "src/minimap/textures/ds_on_t3x.h"
+#include "src/minimap/textures/ds_off_t3x.h"
+#include "src/minimap/textures/drd_on_t3x.h"
+#include "src/minimap/textures/drd_off_t3x.h"
+#include "src/minimap/textures/hrd_on_t3x.h"
+#include "src/minimap/textures/hrd_off_t3x.h"
 #include "src/minimap/textures/resume_t3x.h"
 #include "src/minimap/textures/exit_t3x.h"
 #include "src/minimap/textures/menu_cleft_t3x.h"
@@ -29,6 +36,7 @@ extern struct gfx_configuration gfx_config;
 
 typedef enum {
     DO_NOTHING,
+    MENU_CHANGED,
     CONFIG_CHANGED,
     SHOW_MENU,
     EXIT_MENU

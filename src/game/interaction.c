@@ -24,6 +24,7 @@
 #include "sound_init.h"
 #include "thread6.h"
 #include "enhancements/death_ragdoll.h"
+#include "enhancements/hit_ragdoll.h"
 
 #define INT_GROUND_POUND_OR_TWIRL (1 << 0) // 0x01
 #define INT_PUNCH                 (1 << 1) // 0x02
@@ -727,8 +728,8 @@ u32 take_damage_and_knock_back(struct MarioState *m, struct Object *o) {
         }
 
         update_mario_sound_and_camera(m);
+        knockbackAction = determine_knockback_action(m, o->oDamageOrCoinValue);
         if (death_ragdoll_damage_would_kill(m)) {
-            knockbackAction = determine_knockback_action(m, o->oDamageOrCoinValue);
             deathRagdollProfile = death_ragdoll_profile_from_object(o);
             if (deathRagdollProfile != DEATH_RAGDOLL_PROFILE_DISABLED) {
                 return death_ragdoll_start_with_profile(m,
@@ -739,8 +740,10 @@ u32 take_damage_and_knock_back(struct MarioState *m, struct Object *o) {
             }
             return drop_and_set_mario_action(m, knockbackAction, damage);
         }
-        return drop_and_set_mario_action(m, determine_knockback_action(m, o->oDamageOrCoinValue),
-                                         damage);
+        if (hit_ragdoll_try_start(m, o, knockbackAction)) {
+            return TRUE;
+        }
+        return drop_and_set_mario_action(m, knockbackAction, damage);
     }
 
     return FALSE;
@@ -1204,6 +1207,8 @@ u32 interact_snufit_bullet(struct MarioState *m, UNUSED u32 interactType, struct
             o->oInteractStatus = INT_STATUS_INTERACTED | INT_STATUS_WAS_ATTACKED;
             play_sound(SOUND_ACTION_UNKNOWN458, m->marioObj->header.gfx.cameraToObject);
         } else {
+            u32 knockbackAction;
+
             o->oInteractStatus = INT_STATUS_INTERACTED | INT_STATUS_ATTACKED_MARIO;
             m->interactObj = o;
             take_damage_from_interact_object(m);
@@ -1211,13 +1216,16 @@ u32 interact_snufit_bullet(struct MarioState *m, UNUSED u32 interactType, struct
             play_sound(SOUND_MARIO_ATTACKED, m->marioObj->header.gfx.cameraToObject);
             update_mario_sound_and_camera(m);
 
+            knockbackAction = determine_knockback_action(m, o->oDamageOrCoinValue);
+
             if (death_ragdoll_damage_would_kill(m)) {
-                determine_knockback_action(m, o->oDamageOrCoinValue);
                 return death_ragdoll_start_with_profile(m, DEATH_RAGDOLL_SOURCE_KNOCKBACK,
                                                         DEATH_RAGDOLL_PROFILE_PROJECTILE);
             }
-            return drop_and_set_mario_action(m, determine_knockback_action(m, o->oDamageOrCoinValue),
-                                             o->oDamageOrCoinValue);
+            if (hit_ragdoll_try_start(m, o, knockbackAction)) {
+                return TRUE;
+            }
+            return drop_and_set_mario_action(m, knockbackAction, o->oDamageOrCoinValue);
         }
     }
 
@@ -1247,6 +1255,7 @@ u32 interact_bully(struct MarioState *m, UNUSED u32 interactType, struct Object 
     UNUSED u32 unused;
 
     u32 interaction;
+    u32 knockbackAction;
     if (m->flags & MARIO_METAL_CAP) {
         interaction = INT_FAST_ATTACK_OR_SHELL;
     } else {
@@ -1280,7 +1289,11 @@ u32 interact_bully(struct MarioState *m, UNUSED u32 interactType, struct Object 
         play_sound(SOUND_OBJ_BULLY_METAL, m->marioObj->header.gfx.cameraToObject);
 
         push_mario_out_of_object(m, o, 5.0f);
-        drop_and_set_mario_action(m, bully_knock_back_mario(m), 0);
+        knockbackAction = bully_knock_back_mario(m);
+        if (hit_ragdoll_try_start(m, o, knockbackAction)) {
+            return TRUE;
+        }
+        drop_and_set_mario_action(m, knockbackAction, 0);
 #ifdef VERSION_SH
         queue_rumble_data(5, 80);
 #endif

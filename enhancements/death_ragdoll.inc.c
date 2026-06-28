@@ -74,6 +74,7 @@ static enum DeathRagdollProfile sDeathRagdollProfile;
 static u8 sDeathRagdollWarpStarted;
 static u8 sDeathRagdollSkipDeathExitSpawn;
 static u8 sDeathRagdollHasBlastPos;
+static u8 sDeathRagdollRecoverable;
 static s16 sDeathRagdollDebugZrTapTimer;
 static s16 sDeathRagdollDebugZlTapTimer;
 static s16 sDeathRagdollDebugZrHoldTimer;
@@ -87,6 +88,7 @@ static s32 sDeathRagdollGroundContacts;
 static s32 sDeathRagdollCenterContacts;
 static f32 sDeathRagdollMaxPenetration;
 static f32 sDeathRagdollGroundImpactSpeed;
+static u32 sDeathRagdollRecoveryAction;
 static Vec3f sDeathRagdollCenter;
 static Vec3f sDeathRagdollDebugBljLockPos;
 static Vec3f sDeathRagdollBlastPos;
@@ -178,6 +180,32 @@ static u8 death_ragdoll_center_out_of_bounds(void) {
     }
     vec3f_copy(query, sDeathRagdollCenter);
     return !death_ragdoll_collision_query_is_safe(query, 96.0f);
+}
+
+static u8 death_ragdoll_is_active_action(u32 action) {
+    return action == ACT_DEATH_RAGDOLL || action == ACT_HIT_RAGDOLL;
+}
+
+static u8 death_ragdoll_action_is_enabled(u32 action) {
+    if (action == ACT_HIT_RAGDOLL) {
+        return death_ragdoll_enabled != 0 && hit_ragdoll_enabled != 0;
+    }
+
+    return death_ragdoll_enabled != 0;
+}
+
+static void death_ragdoll_play_random_recovery_landing_sound(struct MarioState *m) {
+    switch (gAudioRandom % 3U) {
+        case 0:
+            play_sound(SOUND_MARIO_OOOF, m->marioObj->header.gfx.cameraToObject);
+            break;
+        case 1:
+            play_sound(SOUND_MARIO_DOH, m->marioObj->header.gfx.cameraToObject);
+            break;
+        default:
+            play_sound(SOUND_MARIO_UH, m->marioObj->header.gfx.cameraToObject);
+            break;
+    }
 }
 
 static u8 death_ragdoll_wall_brake_probe(Vec3f pos, f32 radius, Vec3f resolvedPos) {
@@ -1296,7 +1324,8 @@ Gfx *death_ragdoll_geo_switch_visual(s32 callContext, struct GraphNode *node, UN
     struct GraphNodeSwitchCase *switchCase = (struct GraphNodeSwitchCase *) node;
 
     if (callContext == GEO_CONTEXT_RENDER) {
-        switchCase->selectedCase = (gMarioState != NULL && gMarioState->action == ACT_DEATH_RAGDOLL) ? 1 : 0;
+        switchCase->selectedCase =
+            (gMarioState != NULL && death_ragdoll_is_active_action(gMarioState->action)) ? 1 : 0;
     }
 
     return NULL;
@@ -1845,7 +1874,7 @@ Gfx *death_ragdoll_geo_render(s32 callContext, struct GraphNode *node, UNUSED Ma
     Mtx *matrix;
     s32 limb;
 
-    if (callContext != GEO_CONTEXT_RENDER || m == NULL || m->action != ACT_DEATH_RAGDOLL) {
+    if (callContext != GEO_CONTEXT_RENDER || m == NULL || !death_ragdoll_is_active_action(m->action)) {
         return NULL;
     }
 
@@ -1860,8 +1889,13 @@ Gfx *death_ragdoll_geo_render(s32 callContext, struct GraphNode *node, UNUSED Ma
     for (limb = 0; limb < DEATH_RAGDOLL_LIMB_COUNT; limb++) {
         Vec3f localPos;
         Mat4 scaledMtx;
+        const Gfx *displayList = sDeathRagdollVisualParts[limb].displayList;
 
-        if (sDeathRagdollVisualParts[limb].displayList == NULL) {
+        if (limb == DEATH_RAGDOLL_LIMB_HEAD) {
+            displayList = sDeathRagdollRecoverable ? mario_cap_on_eyes_closed : mario_cap_on_eyes_dead;
+        }
+
+        if (displayList == NULL) {
             continue;
         }
 
@@ -1884,7 +1918,7 @@ Gfx *death_ragdoll_geo_render(s32 callContext, struct GraphNode *node, UNUSED Ma
         }
 
         gSPMatrix(gfx++, VIRTUAL_TO_PHYSICAL(&matrix[limb]), G_MTX_MODELVIEW | G_MTX_MUL | G_MTX_PUSH);
-        gSPDisplayList(gfx++, VIRTUAL_TO_PHYSICAL(sDeathRagdollVisualParts[limb].displayList));
+        gSPDisplayList(gfx++, VIRTUAL_TO_PHYSICAL(displayList));
         gSPPopMatrix(gfx++, G_MTX_MODELVIEW);
     }
 
@@ -1949,7 +1983,7 @@ Gfx *death_ragdoll_geo_rotate_limb(s32 callContext, struct GraphNode *node, UNUS
     rotNode = (struct GraphNodeRotation *) node->next;
     vec3s_set(rotNode->rotation, 0, 0, 0);
 
-    if (m == NULL || m->action != ACT_DEATH_RAGDOLL) {
+    if (m == NULL || !death_ragdoll_is_active_action(m->action)) {
         return NULL;
     }
 
@@ -4916,11 +4950,12 @@ static enum DeathRagdollProfile death_ragdoll_profile_from_depleted_health(struc
     return DEATH_RAGDOLL_PROFILE_DEFAULT;
 }
 
-u32 death_ragdoll_start_with_profile(struct MarioState *m, enum DeathRagdollSource source,
-                                     enum DeathRagdollProfile profile) {
+static u32 death_ragdoll_start_internal(struct MarioState *m, enum DeathRagdollSource source,
+                                        enum DeathRagdollProfile profile, u32 action,
+                                        u32 recoverAction) {
     s32 limb;
 
-    if (!death_ragdoll_enabled) {
+    if (!death_ragdoll_action_is_enabled(action)) {
         return FALSE;
     }
 
@@ -4931,6 +4966,8 @@ u32 death_ragdoll_start_with_profile(struct MarioState *m, enum DeathRagdollSour
     mario_stop_riding_and_holding(m);
     sDeathRagdollSource = source;
     sDeathRagdollProfile = profile;
+    sDeathRagdollRecoverable = action == ACT_HIT_RAGDOLL;
+    sDeathRagdollRecoveryAction = recoverAction;
     sDeathRagdollHasBlastPos = FALSE;
     sDeathRagdollLooseTimer = (profile == DEATH_RAGDOLL_PROFILE_EXPLOSION) ? 18 : 0;
     sDeathRagdollWallBrakeTimer = 0;
@@ -4989,13 +5026,31 @@ u32 death_ragdoll_start_with_profile(struct MarioState *m, enum DeathRagdollSour
     death_ragdoll_reapply_entry_velocity_after_warm_start(m, source);
     death_ragdoll_add_launch_angular_velocity(m, source);
     death_ragdoll_freeze_current_animation(m);
-    m->health = 0xFF;
-    m->hurtCounter = 0;
-    m->healCounter = 0;
-    m->invincTimer = 0;
+    if (!sDeathRagdollRecoverable) {
+        m->health = 0xFF;
+        m->hurtCounter = 0;
+        m->healCounter = 0;
+        m->invincTimer = 0;
+    }
 
-    play_sound_if_no_flag(m, SOUND_MARIO_ATTACKED, MARIO_MARIO_SOUND_PLAYED);
-    return set_mario_action(m, ACT_DEATH_RAGDOLL, source);
+    if (!sDeathRagdollRecoverable) {
+        play_sound_if_no_flag(m, SOUND_MARIO_ATTACKED, MARIO_MARIO_SOUND_PLAYED);
+    }
+    return set_mario_action(m, action, source);
+}
+
+u32 death_ragdoll_start_recoverable(struct MarioState *m, enum DeathRagdollSource source,
+                                    enum DeathRagdollProfile profile, u32 recoverAction) {
+    if (recoverAction == 0) {
+        recoverAction = ACT_HARD_BACKWARD_GROUND_KB;
+    }
+
+    return death_ragdoll_start_internal(m, source, profile, ACT_HIT_RAGDOLL, recoverAction);
+}
+
+u32 death_ragdoll_start_with_profile(struct MarioState *m, enum DeathRagdollSource source,
+                                     enum DeathRagdollProfile profile) {
+    return death_ragdoll_start_internal(m, source, profile, ACT_DEATH_RAGDOLL, 0);
 }
 
 u32 death_ragdoll_start(struct MarioState *m, enum DeathRagdollSource source) {
@@ -5021,7 +5076,8 @@ u32 death_ragdoll_try_start_from_health_depleted(struct MarioState *m) {
         return FALSE;
     }
 
-    if (m->health >= 0x100 || m->action == ACT_DEATH_RAGDOLL || (m->action & ACT_FLAG_INTANGIBLE)) {
+    if (m->health >= 0x100 || death_ragdoll_is_active_action(m->action)
+        || (m->action & ACT_FLAG_INTANGIBLE)) {
         return FALSE;
     }
 
@@ -5070,7 +5126,8 @@ static void death_ragdoll_debug_sync_mario_pos(struct MarioState *m, Vec3f pos) 
 }
 
 static u8 death_ragdoll_debug_can_start_blj(struct MarioState *m) {
-    if (m->action == ACT_DEATH_RAGDOLL || (m->action & (ACT_FLAG_INTANGIBLE | ACT_FLAG_SWIMMING))
+    if (death_ragdoll_is_active_action(m->action)
+        || (m->action & (ACT_FLAG_INTANGIBLE | ACT_FLAG_SWIMMING))
         || m->floor == NULL || m->floor->type == SURFACE_DEATH_PLANE) {
         return FALSE;
     }
@@ -5178,7 +5235,7 @@ u32 death_ragdoll_debug_update_shortcut(struct MarioState *m) {
         return FALSE;
     }
 
-    if (m->action == ACT_DEATH_RAGDOLL || (m->action & ACT_FLAG_INTANGIBLE)
+    if (death_ragdoll_is_active_action(m->action) || (m->action & ACT_FLAG_INTANGIBLE)
         || m->floor == NULL || m->floor->type == SURFACE_DEATH_PLANE) {
         sDeathRagdollDebugZrTapTimer = 0;
         sDeathRagdollDebugZlTapTimer = 0;
@@ -5215,7 +5272,25 @@ u32 death_ragdoll_debug_update_shortcut(struct MarioState *m) {
     return FALSE;
 }
 
-s32 act_death_ragdoll(struct MarioState *m) {
+static s32 death_ragdoll_finish_recovery(struct MarioState *m) {
+    u32 recoverAction = sDeathRagdollRecoveryAction;
+
+    if (recoverAction == 0) {
+        recoverAction = ACT_HARD_BACKWARD_GROUND_KB;
+    }
+
+    if (m->floor != NULL && m->floor->type != SURFACE_DEATH_PLANE && m->pos[1] < m->floorHeight) {
+        m->pos[1] = m->floorHeight;
+    }
+
+    vec3f_copy(sDeathRagdollCenter, m->pos);
+    m->vel[1] = 0.0f;
+    mario_set_forward_vel(m, 0.0f);
+    m->invincTimer = 30;
+    return set_mario_action(m, ACT_HIT_RAGDOLL_RECOVER, recoverAction);
+}
+
+static s32 death_ragdoll_step_internal(struct MarioState *m) {
     struct Surface *floor;
     f32 floorHeight;
     f32 lowestBodyPoint;
@@ -5223,11 +5298,14 @@ s32 act_death_ragdoll(struct MarioState *m) {
     u8 floorValid;
     s32 previousGroundContacts = sDeathRagdollGroundContacts;
 
-    m->marioBodyState->eyeState = MARIO_EYES_DEAD;
+    m->marioBodyState->eyeState = sDeathRagdollRecoverable ? MARIO_EYES_CLOSED : MARIO_EYES_DEAD;
     death_ragdoll_freeze_current_animation(m);
 
     death_ragdoll_cap_velocity(m);
     if (!sDeathRagdollWarpStarted && death_ragdoll_center_out_of_bounds()) {
+        if (sDeathRagdollRecoverable) {
+            return death_ragdoll_finish_recovery(m);
+        }
         return death_ragdoll_begin_death_warp(m);
     }
     death_ragdoll_apply_wall_brake(m);
@@ -5239,8 +5317,10 @@ s32 act_death_ragdoll(struct MarioState *m) {
     death_ragdoll_resolve_ground_contact(m);
     death_ragdoll_apply_ledge_drop_spin(m, previousGroundContacts);
     death_ragdoll_update_pose_from_skeleton(m);
-
     if (!sDeathRagdollWarpStarted && death_ragdoll_center_out_of_bounds()) {
+        if (sDeathRagdollRecoverable) {
+            return death_ragdoll_finish_recovery(m);
+        }
         return death_ragdoll_begin_death_warp(m);
     }
     death_ragdoll_apply_wall_brake(m);
@@ -5250,18 +5330,30 @@ s32 act_death_ragdoll(struct MarioState *m) {
     m->floorHeight = floorHeight;
     floorValid = floor != NULL && floor->type != SURFACE_DEATH_PLANE;
     if (!sDeathRagdollWarpStarted && !floorValid) {
+        if (sDeathRagdollRecoverable) {
+            return death_ragdoll_finish_recovery(m);
+        }
         return death_ragdoll_begin_death_warp(m);
     }
 
     if (!sDeathRagdollWarpStarted && floorValid && sDeathRagdollCenter[1] < floorHeight - 240.0f) {
+        if (sDeathRagdollRecoverable) {
+            return death_ragdoll_finish_recovery(m);
+        }
         return death_ragdoll_begin_death_warp(m);
     }
 
     lowestBodyPoint = death_ragdoll_find_lowest_body_point(m);
-    if (floorValid && m->actionState == 0 && lowestBodyPoint <= floorHeight + 20.0f) {
-        play_sound_if_no_flag(m, SOUND_MARIO_DYING, MARIO_ACTION_SOUND_PLAYED);
-        play_mario_landing_sound_once(m, SOUND_ACTION_TERRAIN_BODY_HIT_GROUND);
-        m->actionState = 1;
+    if (floorValid && m->actionState == 0
+        && lowestBodyPoint <= floorHeight + 20.0f) {
+        if (sDeathRagdollRecoverable) {
+            death_ragdoll_play_random_recovery_landing_sound(m);
+            m->actionState = 1;
+        } else {
+            play_sound_if_no_flag(m, SOUND_MARIO_DYING, MARIO_ACTION_SOUND_PLAYED);
+            play_mario_landing_sound_once(m, SOUND_ACTION_TERRAIN_BODY_HIT_GROUND);
+            m->actionState = 1;
+        }
     }
 
     sDeathRagdollAngularVel[0] *= 0.985f;
@@ -5273,11 +5365,17 @@ s32 act_death_ragdoll(struct MarioState *m) {
     death_ragdoll_clamp_skeleton_velocity();
     death_ragdoll_sync_mario_to_center(m);
 
-    if (!sDeathRagdollWarpStarted && !debugEnabled && m->actionTimer >= DEATH_RAGDOLL_DURATION) {
+    if (sDeathRagdollRecoverable && floorValid && m->actionState != 0
+        && m->actionTimer >= DEATH_RAGDOLL_DURATION) {
+        return death_ragdoll_finish_recovery(m);
+    }
+
+    if (!sDeathRagdollRecoverable && !sDeathRagdollWarpStarted && !debugEnabled
+        && m->actionTimer >= DEATH_RAGDOLL_DURATION) {
         return death_ragdoll_begin_death_warp(m);
     }
 
-    if (!sDeathRagdollWarpStarted && debugEnabled && m->controller != NULL
+    if (!sDeathRagdollRecoverable && !sDeathRagdollWarpStarted && debugEnabled && m->controller != NULL
         && (m->controller->buttonPressed & START_BUTTON)) {
         return death_ragdoll_begin_death_warp(m);
     }
@@ -5291,4 +5389,12 @@ s32 act_death_ragdoll(struct MarioState *m) {
     }
 
     return FALSE;
+}
+
+s32 death_ragdoll_step_recoverable(struct MarioState *m) {
+    return death_ragdoll_step_internal(m);
+}
+
+s32 act_death_ragdoll(struct MarioState *m) {
+    return death_ragdoll_step_internal(m);
 }

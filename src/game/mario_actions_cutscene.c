@@ -30,6 +30,7 @@
 #include "sound_init.h"
 #include "thread6.h"
 #include "enhancements/death_ragdoll.h"
+#include "enhancements/hit_ragdoll.h"
 
 // TODO: put this elsewhere
 enum SaveOption { SAVE_OPT_SAVE_AND_CONTINUE = 1, SAVE_OPT_SAVE_AND_QUIT, SAVE_OPT_CONTINUE_DONT_SAVE };
@@ -58,6 +59,7 @@ static s8 D_8032CBEC[7] = { 2, 3, 2, 1, 2, 3, 2 };
 static u8 sStarsNeededForDialog[6] = { 1, 3, 8, 30, 50, 70 };
 
 #include "enhancements/death_ragdoll.inc.c"
+#include "enhancements/hit_ragdoll.inc.c"
 
 static void play_mario_object_sound_safe(struct MarioState *m, s32 soundBits) {
     if (m->marioObj != NULL) {
@@ -2743,6 +2745,8 @@ s32 mario_execute_cutscene_action(struct MarioState *m) {
         case ACT_DEATH_ON_STOMACH:           cancel = act_death_on_stomach(m);           break;
         case ACT_DEATH_ON_BACK:              cancel = act_death_on_back(m);              break;
         case ACT_DEATH_RAGDOLL:              cancel = act_death_ragdoll(m);              break;
+        case ACT_HIT_RAGDOLL:                cancel = act_hit_ragdoll(m);                break;
+        case ACT_HIT_RAGDOLL_RECOVER:        cancel = act_hit_ragdoll_recover(m);        break;
         case ACT_EATEN_BY_BUBBA:             cancel = act_eaten_by_bubba(m);             break;
         case ACT_END_PEACH_CUTSCENE:         cancel = act_end_peach_cutscene(m);         break;
         case ACT_CREDITS_CUTSCENE:           cancel = act_credits_cutscene(m);           break;
