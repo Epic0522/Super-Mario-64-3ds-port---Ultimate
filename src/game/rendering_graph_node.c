@@ -4081,6 +4081,9 @@ static u8 dynamic_shadow_get_original_solidity(struct GraphNodeShadow *node, Vec
     if ((struct Object *) gCurGraphNodeObject != gMarioObject && node->shadowType != SHADOW_CIRCLE_PLAYER) {
         return node->shadowSolidity;
     }
+    if (!dynamic_shadows_should_render() || !sCurrentObjectDynamicShadowGenerated) {
+        return node->shadowSolidity;
+    }
 
     floorHeight = dynamic_shadow_find_receiver_floor(shadowPos, &floor);
     if (floorHeight < -10000.0f || floor == NULL) {
