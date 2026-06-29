@@ -5201,13 +5201,14 @@ u32 death_ragdoll_debug_update_shortcut(struct MarioState *m) {
     zlPressed = gDeathRagdollDebugZlPressed;
     zrHeld = gDeathRagdollDebugZrHeld;
     zlHeld = gDeathRagdollDebugZlHeld;
-#endif
+#else
     if (m->controller != NULL) {
         zrPressed |= (m->controller->buttonPressed & R_TRIG) != 0;
         zlPressed |= (m->controller->buttonPressed & L_TRIG) != 0;
         zrHeld |= (m->controller->buttonDown & R_TRIG) != 0;
         zlHeld |= (m->controller->buttonDown & L_TRIG) != 0;
     }
+#endif
 
     if (sDeathRagdollDebugZrTapTimer > 0) {
         sDeathRagdollDebugZrTapTimer--;
