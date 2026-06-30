@@ -3121,7 +3121,6 @@ void update_camera(struct Camera *c) {
     UNUSED u8 unused[24];
     u8 cameraModePressed = camera_mode_button_pressed;
     u8 cameraRecenterPressed = camera_recenter_button_pressed;
-    u8 cameraSnapBehindMario = FALSE;
 
     camera_mode_button_pressed = 0;
     camera_recenter_button_pressed = 0;
@@ -3224,13 +3223,16 @@ void update_camera(struct Camera *c) {
         if (newcam_active) {
             newcam_request_recenter_behind_mario();
         } else {
+            newcam_reset_player_offset();
+            newcam_xlu = 255;
+            newcam_set_official_hint(NEWCAM_HINT_NONE, c->pos, c->focus);
             set_cam_angle(CAM_ANGLE_LAKITU);
-            c->mode = CAMERA_MODE_CLOSE;
-            c->defMode = c->mode;
-            gLakituState.mode = c->mode;
-            gLakituState.defMode = c->defMode;
             sCButtonsPressed = 0;
-            cameraSnapBehindMario = TRUE;
+            sCSideButtonYaw = 0;
+            sBehindMarioSoundTimer = 0;
+            set_camera_mode(c, CAMERA_MODE_CLOSE, 1);
+            c->defMode = CAMERA_MODE_CLOSE;
+            gLakituState.defMode = CAMERA_MODE_CLOSE;
         }
         play_sound(SOUND_MENU_CHANGE_SELECT, gDefaultSoundArgs);
     }
@@ -3359,12 +3361,6 @@ void update_camera(struct Camera *c) {
                     break;
             }
         }
-    }
-    if (cameraSnapBehindMario && c->cutscene == 0) {
-        mode_behind_mario_camera(c);
-        c->yaw = c->nextYaw;
-        sync_lakitu_state_to_camera(c);
-        skip_camera_interpolation();
     }
     // Start any Mario-related cutscenes
     u8 nextCutscene = get_cutscene_from_mario_status(c);
