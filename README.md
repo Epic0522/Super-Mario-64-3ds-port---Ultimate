@@ -120,6 +120,12 @@ The files currently preserved in that override pack are:
 
 ### Performance and Audio / パフォーマンスと音声
 
+- **Recommended New 3DS.** Targets 60 FPS and usually runs around 40-60 FPS with anti-aliasing enabled, 800px resolution, and dynamic shadows enabled.
+  **New 3DSの使用をおすすめする。** 60 FPS を目標とし、アンチエイリアス有効、800px 解像度、動的シャドウ有効の状態で通常 40-60 FPS 前後で動作します。
+
+- **Old 3DS performance forecast.** Targets 30 FPS and usually runs around 25-30 FPS with anti-aliasing disabled, 400px resolution, and dynamic shadows disabled.
+  **Old 3DSの性能予測。** 30 FPS を目標とし、アンチエイリアス無効、400px 解像度、動的シャドウ無効の状態で通常 25-30 FPS 前後で動作します。
+
 - **60 FPS and FPS display patches.** The included enhancement patches cover 60 FPS support and optional frame-rate display behavior, updated for the 3DS target.
   **60 FPS と FPS 表示パッチ。** 3DS 向けに更新された 60 FPS 対応と、任意の FPS 表示に関する拡張パッチを含みます。
 
