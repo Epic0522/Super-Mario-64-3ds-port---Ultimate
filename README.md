@@ -5,6 +5,8 @@
   <img src="https://img.shields.io/badge/output-.3dsx%20%7C%20.cia-6f42c1?style=for-the-badge" alt="3DSX and CIA">
 </p>
 
+![Super Mario 64 3DS Port Ultimate screenshot](indevscreenshots/2026-07-07_13-11-53.056_top.jpeg)
+
 <table>
   <tr>
     <td valign="top">
