@@ -933,7 +933,12 @@ SMDH_AUTHOR ?= SM64 Port Team
 SMDH_FLAGS ?= visible,allow3d,recordusage,extendedbanner
 SMDH_ICON := 3ds/icon.smdh
 CIA_ICON := 3ds/icon.icn
+BANNER_MODE ?= 3d
+ifeq ($(BANNER_MODE),static)
 CIA_BANNER := 3ds/banner.bnr
+else
+CIA_BANNER := 3ds/banner_3d/banner.bnr
+endif
 BANNERTOOL ?= $(or $(shell command -v bannertool 2>/dev/null),$(wildcard /tmp/3ds-bannertool/build/bannertool),bannertool)
 
 $(ELF): $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(BUILD_DIR)/src/pc/gfx/shader.shbin.o $(BUILD_DIR)/src/pc/gfx/shadow.shbin.o $(MINIMAP_O) $(SMDH_ICON)
@@ -980,7 +985,7 @@ $(BUILD_DIR)/$(MINIMAP_TEXTURES)/arrow.png: textures/segment2/segment2.081D0.rgb
 $(CIA_ICON): 3ds/icon.png
 	$(BANNERTOOL) makesmdh -s "$(SMDH_TITLE)" -l "$(SMDH_DESCRIPTION)" -p "$(SMDH_AUTHOR)" -f "$(SMDH_FLAGS)" -i $< -o $@
 
-$(CIA_BANNER): 3ds/banner.png 3ds/audio.wav
+3ds/banner.bnr: 3ds/banner.png 3ds/audio.wav
 	$(BANNERTOOL) makebanner -i 3ds/banner.png -a 3ds/audio.wav -o $@
 
 else

@@ -5,546 +5,192 @@
   <img src="https://img.shields.io/badge/output-.3dsx%20%7C%20.cia-6f42c1?style=for-the-badge" alt="3DSX and CIA">
 </p>
 
-![Super Mario 64 3DS Port Ultimate screenshot](indevscreenshots/2026-07-07_13-11-53.056_top.jpeg)
-
 <table>
   <tr>
-    <td valign="top">
-
-Super Mario 64 3DS Port Ultimate is a Nintendo 3DS-focused build of the Super Mario 64 decompilation port, based on the 3DS port lineage and expanded with a bottom-screen minimap, persistent 3DS display settings, dynamic shadows, improved presentation work, ragdoll system and optional debug options for development and testing.
-
-Super Mario 64 3DS Port Ultimate は、Nintendo 3DS 向けに調整された『スーパーマリオ64』デコンパイルポート版です。既存の 3DS ポート系統をベースに、下画面ミニマップ、保存可能な 3DS 表示設定、動的シャドウ、表示演出の改善、ラグドールシステム、開発・テスト用の任意で使える debug オプションを追加しています。
-
-  </td>
-    <td align="right" valign="top" width="360">
-      <img src="indevscreenshots/IMG_9021.jpeg" alt="Super Mario 64 3DS Port Ultimate preview" width="320">
+    <td width="50%" align="center" valign="top">
+      <img src="indevscreenshots/2026-07-07_13-11-53.056_top.jpeg" alt="3D HOME Menu banner" width="100%"><br>
+      <sub>3D HOME Menu banner / 3D HOME メニューバナー</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="indevscreenshots/IMG_9021.jpeg" alt="Super Mario 64 3DS Port Ultimate running on hardware" width="100%"><br>
+      <sub>Running on Nintendo 3DS / Nintendo 3DS 実機</sub>
     </td>
   </tr>
 </table>
 
-## ⬇️Clone without development screenshots / ダウンロード：
+Super Mario 64 3DS Port Ultimate is a Nintendo 3DS-focused build of the SM64 decompilation port. It combines a bottom-screen minimap and HUD, improved camera controls, persistent display options, dynamic shadows, ragdoll effects, presentation upgrades, and optional debug tools.
+
+Super Mario 64 3DS Port Ultimate は、SM64 デコンパイルポートを Nintendo 3DS 向けに拡張したビルドです。下画面ミニマップと HUD、改良されたカメラ操作、保存可能な表示設定、動的シャドウ、ラグドール、表示演出、任意のデバッグ機能を搭載しています。
+
+## ⬇️ Download / ダウンロード
+
+Clone without development screenshots:
+
+開発中のスクリーンショットを除外してクローン：
+
 ```sh
-git clone --filter=blob:none --sparse https://github.com/Epic0522/Super-Mario-64-3ds-port---Ultimate.git && cd Super-Mario-64-3ds-port---Ultimate && git sparse-checkout set --no-cone '/*' '!/indevscreenshots/'
+git clone --filter=blob:none --sparse https://github.com/Epic0522/Super-Mario-64-3ds-port---Ultimate.git
+cd Super-Mario-64-3ds-port---Ultimate
+git sparse-checkout set --no-cone '/*' '!/indevscreenshots/'
 ```
-## 🔗Related Repositories / 関連リポジトリ
 
-- **SM64 decompilation / SM64 デコンパイル：** [n64decomp/sm64](https://github.com/n64decomp/sm64)
-- **SM64 port / SM64 ポート：** [sm64-port/sm64-port](https://github.com/sm64-port/sm64-port)
-- **SM64 3DS / SM64 3DS：** [sm64-port/sm64_3ds](https://github.com/sm64-port/sm64_3ds) 
-- **SM64 3DS minimap prototype / SM64 3DS ミニマッププロトタイプ：** [mkst/sm64-port](https://github.com/mkst/sm64-port)
+## 🔗 Related Repositories / 関連リポジトリ
 
-## 👀At a Glance / 概要
+- [n64decomp/sm64](https://github.com/n64decomp/sm64) — SM64 decompilation / SM64 デコンパイル
+- [sm64-port/sm64-port](https://github.com/sm64-port/sm64-port) — PC port lineage / PC ポート系統
+- [sm64-port/sm64_3ds](https://github.com/sm64-port/sm64_3ds) — 3DS port lineage / 3DS ポート系統
+- [mkst/sm64-port](https://github.com/mkst/sm64-port) — 3DS minimap prototype / 3DS ミニマッププロトタイプ
 
-- **Platform target:** Nintendo 3DS, with both `.3dsx` and `.cia` outputs.
-- **Signature additions:** bottom-screen minimap and HUD, synchronized lower-screen transitions, hybrid official/free camera control, dynamic shadows, death ragdoll behavior, and optional debug utilities.
-- **Persistent options:** 3DS anti-aliasing, 400px/800px display mode, dynamic shadows, death ragdoll, hit ragdoll, and camera tuning are saved in `sm64config.txt`.
+## ⚙️ Features / 機能
 
-- **対象プラットフォーム：** Nintendo 3DS。`.3dsx` と `.cia` の両方を出力できます。
-- **主な追加要素：** 下画面ミニマップと HUD、同期した下画面トランジション、公式/自由カメラのハイブリッド操作、動的シャドウ、ラグドール。
-- **保存される設定：** 3DS アンチエイリアス、400px/800px 表示モード、動的シャドウ、死亡ラグドール、受撃ラグドール、カメラ設定は `sm64config.txt` に保存されます。
+- **Bottom-screen interface:** course minimaps, Mario position and heading, lives, stars, coins, red coins, BGM titles, touch settings, and synchronized transitions.
+  **下画面インターフェース：** コースマップ、マリオの位置と向き、残機、スター、コイン、赤コイン、BGM 名、タッチ設定、同期トランジションを表示します。
+- **Camera and controls:** switch between the official camera and free Puppycam-style camera, with C-Stick input and quick recentering.
+  **カメラと操作：** 公式カメラと Puppycam 風自由カメラを切り替え、C-Stick 操作とクイック再センタリングを利用できます。
+- **3DS presentation:** stereoscopic 3D, 400px/800px modes, anti-aliasing options, a 3D HOME Menu banner, and persistent display settings.
+  **3DS 表示演出：** 立体 3D、400px/800px モード、アンチエイリアス設定、3D HOME メニューバナー、保存可能な表示設定に対応します。
+- **Gameplay enhancements:** optional dynamic shadows, death ragdoll, and hit ragdoll behavior.
+  **ゲームプレイ拡張：** 動的シャドウ、死亡ラグドール、受撃ラグドールを任意で有効化できます。
+- **Performance and audio:** 60 FPS support, multi-threaded audio, enhanced RSPA, and New 3DS-oriented rendering options. Luma3DS v10.1.1 or newer is required for multi-threaded audio.
+  **パフォーマンスと音声：** 60 FPS、マルチスレッド音声、強化 RSPA、New 3DS 向け描画設定を搭載しています。マルチスレッド音声には Luma3DS v10.1.1 以降が必要です。
+- **Debug tools:** an optional, non-persistent debug mode provides test shortcuts, FPS display support, and ragdoll utilities.
+  **デバッグ機能：** 保存されない任意の debug モードで、テスト用ショートカット、FPS 表示、ラグドール確認機能を利用できます。
 
+New 3DS is recommended. Typical targets are 40–60 FPS on New 3DS with enhanced effects enabled and 25–30 FPS on Old 3DS with lighter 400px settings.
 
-During development, a small number of generated asset-side files were intentionally patched for project behavior or presentation. Because `extract_assets.py` can overwrite these files, the project keeps mirrored replacements under `project_asset_overrides/`. After local extraction, copy that directory back into the repository root so the patched versions replace the freshly generated ones:
+New 3DS を推奨します。目安として、New 3DS では拡張効果有効時に 40～60 FPS、Old 3DS では軽量な 400px 設定で 25～30 FPS を想定しています。
 
-開発中に、一部の生成済みアセット側ファイルを本プロジェクト用の挙動・表示調整のために変更しています。`extract_assets.py` によってこれらのファイルが上書きされる可能性があるため、`project_asset_overrides/` に同じ構成の上書き用ファイルを保持しています。ローカルでアセット抽出を行った後、このディレクトリの内容をリポジトリのルートへコピーし、生成されたファイルをパッチ版で上書きしてください：
+## 🎮 Controls and Configuration / 操作と設定
+
+Tap the lower screen to open the mini-menu. `X` switches cameras, `Y` recenters the view, and the C-Stick controls the free camera. The `Enh` page toggles dynamic shadows and ragdoll options.
+
+下画面をタッチするとミニメニューが開きます。`X` でカメラ切り替え、`Y` で視点を再センタリングし、C-Stick で自由カメラを操作します。`Enh` ページでは動的シャドウとラグドール設定を変更できます。
+
+`sm64config.txt` stores controls, Puppycam values, display mode, anti-aliasing, dynamic shadows, and ragdoll preferences. `.3dsx` builds keep configuration and save data beside the executable; `.cia` builds store them at the SD card root.
+
+`sm64config.txt` には操作、Puppycam、表示モード、アンチエイリアス、動的シャドウ、ラグドール設定が保存されます。`.3dsx` 版は実行ファイルと同じ場所、`.cia` 版は SD カードのルートに設定とセーブデータを保存します。
+
+When debug mode is enabled:
+
+debug モード有効時：
+
+| Shortcut / ショートカット | Function / 機能 |
+| --- | --- |
+| `SELECT + ZL + ZR` | Level selector / レベルセレクト |
+| `START + ZL + ZR` in final Bowser fight | Ending and staff roll / エンディングとスタッフロール |
+| Double-tap `ZR` | Trigger death ragdoll / 死亡ラグドールを起動 |
+| Hold `ZR` | Restore health / 体力回復 |
+| Double-tap `ZL` | Set low health / 体力を低下 |
+| Hold `ZL` | In-place BLJ test / その場 BLJ テスト |
+
+## 🏗️ Building / ビルド
+
+Place the matching ROM in the repository root (`baserom.us.z64`, `baserom.eu.z64`, `baserom.jp.z64`, or `baserom.sh.z64`). The first `make` automatically builds host tools and extracts the required assets; running `extract_assets.py` manually is not required.
+
+対応する ROM（`baserom.us.z64`、`baserom.eu.z64`、`baserom.jp.z64`、`baserom.sh.z64`）をリポジトリのルートに配置してください。最初の `make` がホストツールの作成と必要なアセット抽出を自動実行するため、通常は `extract_assets.py` を手動実行する必要はありません。
+
+Requirements / 必要環境：
+
+- devkitPro and devkitARM
+- `3dsxtool`, `smdhtool`, `tex3ds`, and `makerom`
+- `bannertool` for CIA builds / CIA ビルド用 `bannertool`
+
+Example environment / 環境変数の例：
+
+```sh
+export DEVKITPRO=/opt/devkitpro
+export DEVKITARM=/opt/devkitpro/devkitARM
+export PATH="/opt/devkitpro/devkitARM/bin:/opt/devkitpro/tools/bin:$PATH"
+```
+
+Build `.3dsx` / `.3dsx` をビルド：
+
+```sh
+make VERSION=us -j$(sysctl -n hw.ncpu)
+```
+
+Build `.cia` / `.cia` をビルド：
+
+```sh
+BANNERTOOL=/path/to/bannertool make VERSION=us cia -j$(sysctl -n hw.ncpu)
+```
+
+Use `VERSION=eu`, `jp`, or `sh` for another region. Run `make clean` after changing build flags.
+
+別リージョンでは `VERSION=eu`、`jp`、`sh` を指定します。ビルドフラグを変更した後は `make clean` を実行してください。
+
+| Optional flag / 任意フラグ | Purpose / 用途 |
+| --- | --- |
+| `BANNER_MODE=static` | Use the legacy static CIA banner / 従来の静的 CIA バナーを使用 |
+| `ENABLE_N3DS_FRAMESKIP=1` | Enable legacy frame skip / 旧フレームスキップを有効化 |
+| `DISABLE_AUDIO=1` | Disable audio for testing / テスト用に音声を無効化 |
+| `FORCE_REFERENCE_RSPA=1` | Use reference RSP audio / 参照 RSP 音声を使用 |
+| `DISABLE_ENHANCED_RSPA=1` | Disable enhanced RSPA / 強化 RSPA を無効化 |
+| `AUDIO_USE_ACCURATE_MATH=1` | Use accurate audio math / 高精度音声演算を使用 |
+
+### Asset overrides / アセット上書き
+
+Some extracted actor files have project-specific fixes mirrored under `project_asset_overrides/`. If you run asset extraction manually, restore them afterward:
+
+一部の抽出済み actor ファイルには本プロジェクト固有の修正があり、`project_asset_overrides/` に複製されています。アセット抽出を手動実行した場合は、後から復元してください：
 
 ```sh
 cp -R project_asset_overrides/* .
 ```
 
-The files currently preserved in that override pack are:
-現在この上書きパックに含まれているファイル：
+## 📦 Package Assets / パッケージ用アセット
 
-- `actors/blue_coin_switch/geo.inc.c`
-- `actors/cannon_barrel/geo.inc.c`
-- `actors/cannon_base/geo.inc.c`
-- `actors/capswitch/geo.inc.c`
-- `actors/mario/geo.inc.c`
-- `actors/poundable_pole/geo.inc.c`
-- `actors/water_bubble/geo.inc.c`
+`3ds/icon.png` is used for the `.3dsx` and CIA icon. CIA builds use the prebuilt 3D banner at `3ds/banner_3d/banner.bnr` by default; `BANNER_MODE=static` selects the legacy `3ds/banner.png` banner.
 
+`3ds/icon.png` は `.3dsx` と CIA のアイコンに使われます。CIA は標準で `3ds/banner_3d/banner.bnr` のビルド済み 3D バナーを使用し、`BANNER_MODE=static` で従来の `3ds/banner.png` を選択できます。
 
-## ⚙️Feature Highlights / 機能概要
+Regenerate the 3D BNR after updating its CGFX or audio:
 
-### 3DS Presentation / 3DS 表示演出
-
-- **Stereo 3D and display modes.** The game supports 400px stereoscopic 3D and an 800px high-resolution mode. The renderer automatically disables anti-aliasing and 800px rendering while stereoscopic 3D is active so the display path stays within hardware limits.
-  **立体 3D と表示モード。** ゲームは 400px の立体 3D と 800px の高解像度モードに対応しています。立体 3D 有効時は、ハードウェア制限内で動作するように、レンダラーがアンチエイリアスと 800px レンダリングを自動的に無効化します。
-
-- **Persistent 3DS video settings.** Anti-aliasing and 400px/800px mode can be changed from the touch menu and are saved to `sm64config.txt`, so performance-oriented choices remain in effect after rebooting the game.
-  **保存可能な 3DS 表示設定。** アンチエイリアスと 400px/800px モードはタッチメニューから切り替えられ、`sm64config.txt` に保存されます。そのため、パフォーマンス重視の設定はゲーム再起動後も維持されます。
-
-- **Transition-matched lower-screen compositing.** The lower screen mirrors the original upper-screen transition family, including circle, star, Mario head, Bowser head, and full-color fades.
-  **上画面と同期する下画面トランジション。** 下画面は、円形、星、マリオの顔、クッパの顔、単色フェードなど、オリジナル上画面のトランジション表現に同期します。
-
-### Bottom-Screen Interface / 下画面インターフェース
-
-- **Bottom-screen minimap.** The lower screen displays course maps with Mario position and heading, including support for multi-area stages and special map states such as drained Castle Grounds where applicable.
-  **下画面ミニマップ。** 下画面にはコースマップ、マリオの位置と向きが表示されます。複数エリアを持つステージや、城外の排水状態のような特殊なマップ状態にも対応しています。
-
-- **Integrated lower-screen HUD.** Lives, stars, coins, red coin sprites, and the current BGM title are laid out as a persistent bottom-screen HUD for quick reference without occupying the main gameplay view.
-  **統合された下画面 HUD。** 残機数、スター数、コイン数、赤コインのスプライト、現在の BGM タイトルを常時表示の下画面 HUD として配置し、メインのゲーム画面を占有せずに素早く確認できます。
-
-- **Touch mini-menu.** A full-screen touch trigger opens a centered lower-screen control panel. The root menu provides anti-aliasing, resolution, debug, `Enh`, hide-menu, and exit actions; `Enh` opens a second page for dynamic shadows, death ragdoll, and hit ragdoll toggles. The menu is forcibly closed or disabled in scenes where mixed rendering would cause conflicts, and every reopen starts from the root page.
-  **タッチメニュー。** 下画面全体のタッチ操作で中央配置の操作パネルを開きます。ルートメニューではアンチエイリアス、解像度、debug、`Enh`、メニュー非表示、終了を操作でき、`Enh` からは動的シャドウ、死亡ラグドール、受撃ラグドールの切り替えページに入れます。混合レンダリングの競合が起きやすい場面ではメニューは強制的に閉じられるか無効化され、開き直したときは常にルートページから始まります。
-
-### Camera and Controls / カメラと操作
-
-- **Hybrid official/free camera system.** The project combines the original official SM64 camera with a 3DS-adapted free-camera mode. Players can switch between them at runtime instead of committing to only one camera style for the whole play session.
-  **公式/自由カメラのハイブリッドシステム。** 本プロジェクトは、オリジナル SM64 の公式カメラと 3DS 向けに調整した自由カメラを組み合わせています。プレイヤーは実行中にいつでも切り替えられます。
-
-- **Quick recenter behavior.** A dedicated recenter input snaps the free camera behind Mario immediately, and in official mode it restores a stable Lakitu trailing camera. This gives the 3DS build a faster and more reliable recovery path than the default camera flow.
-  **クイック再センタリング。** 専用の再センタリング入力により、自由カメラでは視点をすぐマリオの背後へ戻し、公式カメラでは安定した Lakitu 追従視点へ戻します。オリジナルの標準カメラ操作よりも、3DS 版では素早く確実に視点を立て直せます。
-
-- **Analogue camera input on C-Stick.** When free camera is active, the C-Stick acts as analogue camera input. When it is idle, the game can still fall back to the original digital C-button style expected by SM64.
-  **C-Stick のアナログカメラ入力。** 自由カメラ有効時は C-Stick をアナログカメラ入力として使用します。入力がない場合でも、SM64 オリジナルが想定するデジタル C ボタン形式に戻せます。
-
-- **Saved Puppycam tuning.** Sensitivity, inversion, stopping speed, centering aggression, and pan amount are all stored in `sm64config.txt`.
-  **保存可能な Puppycam 設定。** 感度、反転、停止速度、中央復帰の強さ、パン量はすべて `sm64config.txt` に保存されます。
-
-- **Configurable controls.** Player controls are read from `sm64config.txt`, including 3DS button bindings and camera-related behavior.
-  **設定可能な操作。** 3DS ボタン割り当てやカメラ関連の挙動を含むプレイヤー操作は、`sm64config.txt` から読み込まれます。
-
-### Gameplay and Debugging / ゲームプレイ強化とデバッグ
-
-- **Dynamic shadows.** Supported objects can use dynamic projected shadows through the 3DS renderer. The feature is controlled by `dynamic_shadows_enabled` in `sm64config.txt`, and the original shadow behavior remains available as a fallback.
-  **動的シャドウ。** 対応オブジェクトは 3DS レンダラーを通じて動的な投影シャドウを表示できます。この機能は `sm64config.txt` の `dynamic_shadows_enabled` で制御され、オリジナルのシャドウ挙動もフォールバックとして残しています。
-
-- **Death ragdoll system.** Fatal damage can transition Mario into a physics-driven death ragdoll with collision response, wall braking, ledge behavior, squish handling, and a high-angle death camera designed to frame the scene more cleanly.
-  **死亡ラグドールシステム。** マリオが致命的なダメージを受けると、物理ベースのラグドール状態へ移行できます。衝突応答、壁ブレーキ、足場端での挙動、押しつぶし処理、シーンを見やすく映す俯瞰カメラを含みます。
-
-- **Hit ragdoll toggle (destructive to vanilla behavior).** The `Enh` submenu can also redirect supported non-lethal knockback reactions into a recoverable ragdoll state. This option is intentionally destructive relative to original SM64 timing and feel, depends on death ragdoll being enabled, and defaults to off.
-  **受撃ラグドール切り替え（原作挙動に対して破壊的）。** `Enh` サブメニューでは、対応する非致死ノックバックを復帰可能なラグドール状態へ置き換える設定も切り替えられます。この機能はオリジナル SM64 の受撃タイミングや感触を意図的に崩す破壊的な変更であり、死亡ラグドール有効時のみ使用でき、初期状態ではオフです。
-
-- **Optional debug mode.** Debug mode is off by default and is not persisted. When enabled from the touch menu, it exposes development/test utilities such as ragdoll visualization, life recovery, manual ragdoll triggering, FPS display support, and an in-place BLJ for high-speed behavior testing.
-  **任意で使える debug モード。** Debug は標準でオフで、保存されません。タッチメニューから有効化すると、ラグドール可視化、体力回復、手動ラグドール起動、FPS 表示対応、高速挙動テスト用のその場 BLJ などのテスト機能を利用できます。
-
-
-### Performance and Audio / パフォーマンスと音声
-
-- **Recommended New 3DS.** Targets 60 FPS and usually runs around 40-60 FPS with anti-aliasing enabled, 800px resolution, and dynamic shadows enabled.
-  **New 3DSの使用をおすすめする。** 60 FPS を目標とし、アンチエイリアス有効、800px 解像度、動的シャドウ有効の状態で通常 40-60 FPS 前後で動作します。
-
-- **Old 3DS performance forecast.** Targets 30 FPS and usually runs around 25-30 FPS with anti-aliasing disabled, 400px resolution, and dynamic shadows disabled.
-  **Old 3DSの性能予測。** 30 FPS を目標とし、アンチエイリアス無効、400px 解像度、動的シャドウ無効の状態で通常 25-30 FPS 前後で動作します。
-
-- **60 FPS and FPS display patches.** The included enhancement patches cover 60 FPS support and optional frame-rate display behavior, updated for the 3DS target.
-  **60 FPS と FPS 表示パッチ。** 3DS 向けに更新された 60 FPS 対応と、任意の FPS 表示に関する拡張パッチを含みます。
-
-- **Multi-threaded audio.** Audio runs on Core 1 on Old 3DS and Core 2 on New 3DS. This requires Luma3DS v10.1.1 or newer.
-  **マルチスレッド音声。** 音声スレッドは Old 3DS では Core 1、New 3DS では Core 2 で動作します。この機能には Luma3DS v10.1.1 以降が必要です。
-
-- **Enhanced RSP audio emulation.** The 3DS audio mixer includes enhanced RSPA paths for performance, with build flags available for reference behavior or accurate math when testing.
-  **強化 RSP 音声エミュレーション。** 3DS 音声ミキサーにはパフォーマンス向上用の強化 RSPA 経路が含まれ、参照実装やより正確な演算挙動をテストするためのビルドフラグも用意されています。
-
-- **Naive frame-skip option.** A legacy 3DS frame-skip path remains available with `ENABLE_N3DS_FRAMESKIP=1` when building, although it is usually not necessary for current builds.
-  **簡易フレームスキップオプション。** 旧来の 3DS フレームスキップ経路も残っており、ビルド時に `ENABLE_N3DS_FRAMESKIP=1` で有効化できます。ただし現在のビルドでは通常必要ありません。
-
-- **Build-time audio toggle and graphics pool fix.** Audio can be disabled with `DISABLE_AUDIO=1` for targeted testing, and the `GFX_POOL_SIZE` fix is included to support heavier rendering paths such as 60 FPS builds.
-  **ビルド時の音声無効化とグラフィックプール修正。** `DISABLE_AUDIO=1` によりテスト用に音声を無効化できます。また、60 FPS など重いレンダリング経路を支えるための `GFX_POOL_SIZE` 修正も含まれています。
-
-## 🎮Controls and Touch Screen / 操作とタッチ画面
-
-Tap the lower screen to open the mini-menu when the current scene allows it. The root page provides anti-aliasing, resolution mode, debug mode, `Enh`, hide-menu, and exit controls. The `Enh` page contains dynamic shadows, death ragdoll, and hit ragdoll toggles; hit ragdoll is forced off whenever death ragdoll is off.
-
-現在の場面で許可されている場合、下画面をタッチするとミニメニューを開けます。ルートページではアンチエイリアス、解像度モード、debug モード、`Enh`、メニュー非表示、ゲーム終了を操作できます。`Enh` ページでは動的シャドウ、死亡ラグドール、受撃ラグドールを切り替えられ、死亡ラグドールがオフのときは受撃ラグドールも強制的にオフになります。
-
-On Nintendo 3DS, `X` toggles between the original official camera and the free Puppycam-style camera. `Y` performs a quick recenter action: in free camera it snaps the view back behind Mario, and in official camera it restores a stable Lakitu-style trailing view.
-
-Nintendo 3DS では、`X` でオリジナルの公式カメラと Puppycam 風の自由カメラを切り替えます。`Y` はクイック再センタリングです。自由カメラでは視点をすばやくマリオの背後へ戻し、公式カメラでは安定した追従視点へ戻します。
-
-When the free camera is active, the C-Stick is used as analogue camera input. When using Dpads, the camera can act as standard digital C-button behavior expected by the original game.
-
-自由カメラ有効時は、C-Stick がアナログカメラ入力として使われます。十字ボタン入力時は、オリジナルと同じデジタル C ボタン挙動として扱われます。
-
-The anti-aliasing and resolution buttons are unavailable during stereo 3D because those modes conflict with the 3DS 3D display path.
-
-アンチエイリアスと 800px モードは 3DS の立体表示経路と競合するため、立体 3D 有効時は関連ボタンを使用できません。
-
-When debug mode is enabled from the lower-screen menu, these 3DS shortcuts become active:
-
-下画面メニューから debug モードを有効化すると、次の 3DS ショートカットが有効になります：
-
-| Shortcut | Function |
-| --- | --- |
-| `SELECT + ZL + ZR` | Open the level selector. |
-| `START + ZL + ZR` in the final Bowser fight | Trigger the ending sequence and staff roll. |
-| Double-tap `ZR` | Manually trigger Mario's death ragdoll action. |
-| Hold `ZR` | Restore Mario's health while held. |
-| Double-tap `ZL` | Drop Mario to low health. |
-| Hold `ZL` | Lock Mario in place and repeatedly perform BLJ. |
-
-| ショートカット | 機能 |
-| --- | --- |
-| `SELECT + ZL + ZR` | レベルセレクトを開きます。 |
-| 最終クッパ戦で `START + ZL + ZR` | エンディングとスタッフロールへ進みます。 |
-| `ZR` をダブルタップ | マリオの死亡ラグドール動作を手動で発動します。 |
-| `ZR` を長押し | マリオの体力を回復します。 |
-| `ZL` をダブルタップ | マリオの体力を 1 まで下げます。 |
-| `ZL` を長押し | マリオの位置を固定し、BLJ を繰り返し実行します。 |
-
-## 🔧Configuration and Save Data / 設定とセーブデータ
-
-The main configuration file is `sm64config.txt`. It stores controls, Puppycam values, dynamic shadow preference, death ragdoll preference, hit ragdoll preference, and the 3DS anti-aliasing / wide-mode choices.
-
-メイン設定ファイルは `sm64config.txt` です。操作設定、Puppycam の値、動的シャドウ設定、死亡ラグドール設定、受撃ラグドール設定、3DS のアンチエイリアス/ワイドモード選択を保存します。
-
-For `.3dsx` builds, configuration and save data are stored beside the `.3dsx` file. For `.cia` builds, configuration and save data are stored at the SD card root.
-
-`.3dsx` ビルドでは、設定ファイルとセーブデータは `.3dsx` ファイルと同じディレクトリに保存されます。`.cia` ビルドでは、設定ファイルとセーブデータは SD カードのルートに保存されます。
-
-Useful configuration keys include `dynamic_shadows_enabled`, `death_ragdoll_enabled`, `hit_ragdoll_enabled`, `n3ds_anti_aliasing`, `n3ds_wide_mode`, `puppycam_sensitivity_x`, `puppycam_sensitivity_y`, `puppycam_invert_x`, `puppycam_invert_y`, `puppycam_stopping_speed`, `puppycam_centre_aggression`, and `puppycam_pan_amount`.
-
-よく使う設定キーには、`dynamic_shadows_enabled`、`death_ragdoll_enabled`、`hit_ragdoll_enabled`、`n3ds_anti_aliasing`、`n3ds_wide_mode`、`puppycam_sensitivity_x`、`puppycam_sensitivity_y`、`puppycam_invert_x`、`puppycam_invert_y`、`puppycam_stopping_speed`、`puppycam_centre_aggression`、`puppycam_pan_amount` があります。
-
-## 🏗️Building / ビルド
-
-Place a matching baserom in the repository root before building, for example `baserom.us.z64` for the US version. Change `VERSION=us` to `eu`, `jp`, or `sh` when building another supported region.
-
-ビルド前に、対応する baserom をリポジトリのルートに配置してください。たとえば US 版では `baserom.us.z64` を使用します。他の対応リージョンをビルドする場合は、`VERSION=us` を `eu`、`jp`、`sh` に変更してください。
-
-From a clean release checkout, you do not need to run `extract_assets.py` manually. The first `make` automatically builds the required host tools and extracts ROM-backed assets into ignored local files before compiling.
-
-クリーンな配布版チェックアウトから始める場合、`extract_assets.py` を手動で実行する必要はありません。最初の `make` が必要なホストツールのビルドと、ROM 由来アセットの抽出を自動で行ってからコンパイルします。
-
-For a normal 3DS build environment, export `DEVKITPRO` and `DEVKITARM` first so the Makefile can find the devkitPro toolchain. If `bannertool` is not installed globally, also export `BANNERTOOL` to its full path. The examples below assume the common macOS/Linux install path:
-
-通常の 3DS ビルド環境では、Makefile が devkitPro ツールチェーンを見つけられるように、先に `DEVKITPRO` と `DEVKITARM` を設定してください。`bannertool` がグローバルに入っていない場合は、そのフルパスを `BANNERTOOL` に設定してください。以下の例では、一般的な macOS/Linux のインストールパスを想定しています：
-
-```sh
-export DEVKITPRO=/opt/devkitpro
-export DEVKITARM=/opt/devkitpro/devkitARM
-```
-
-Recommended zero-start `.3dsx` build command on macOS:
-
-macOS での「ゼロからの」推奨 `.3dsx` ビルドコマンド：
-
-```sh
-PATH="/opt/devkitpro/tools/bin:$PATH" \
-DEVKITPRO=/opt/devkitpro \
-DEVKITARM=/opt/devkitpro/devkitARM \
-make -j$(sysctl -n hw.ncpu)
-```
-
-If you keep `bannertool` outside of `PATH`, append `BANNERTOOL=/path/to/bannertool` to the same command line.
-
-`bannertool` を `PATH` 外に置いている場合は、同じコマンドラインに `BANNERTOOL=/path/to/bannertool` を追加してください。
-
-After changing build flags, run `make clean` before rebuilding so the new flags are applied consistently.
-
-ビルドフラグを変更した後は、新しいフラグを確実に反映するために、再ビルド前に `make clean` を実行してください。
-
-Build a Homebrew Launcher `.3dsx` (output: `build/us_3ds/sm64.us.aev64u6.3dsx`):
-
-Homebrew Launcher 用の `.3dsx` をビルドします（出力先：`build/us_3ds/sm64.us.aev64u6.3dsx`）：
-
-```sh
-PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us -j$(sysctl -n hw.ncpu)
-```
-
-Build an installable `.cia` (output: `build/us_3ds/sm64.us.aev64u6.cia`):
-
-インストール可能な `.cia` をビルドします（出力先：`build/us_3ds/sm64.us.aev64u6.cia`）：
-
-```sh
-PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM BANNERTOOL=/path/to/bannertool make VERSION=us cia -j$(sysctl -n hw.ncpu)
-```
-
-Clean previous outputs:
-
-既存のビルド出力を削除します：
-
-```sh
-DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make clean
-```
-
-Build with the legacy 3DS frame-skip option:
-
-旧来の 3DS フレームスキップオプションを有効にしてビルドします：
-
-```sh
-PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us ENABLE_N3DS_FRAMESKIP=1 -j$(sysctl -n hw.ncpu)
-```
-
-Disable audio for a test build:
-
-テストビルド用に音声を無効化します：
-
-```sh
-PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us DISABLE_AUDIO=1 -j$(sysctl -n hw.ncpu)
-```
-
-Use the PC port's reference RSP audio path:
-
-PC ポート版の参照 RSP 音声経路を使用します：
-
-```sh
-PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us FORCE_REFERENCE_RSPA=1 -j$(sysctl -n hw.ncpu)
-```
-
-Disable the enhanced RSP audio performance path while keeping the 3DS mixer:
-
-3DS ミキサーを維持したまま、強化 RSP 音声の高速経路を無効化します：
-
-```sh
-PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us DISABLE_ENHANCED_RSPA=1 -j$(sysctl -n hw.ncpu)
-```
-
-Use accurate audio math where supported:
-
-対応している音声実装で、より正確な演算挙動を使用します：
-
-```sh
-PATH="/opt/devkitpro/tools/bin:$PATH" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM make VERSION=us AUDIO_USE_ACCURATE_MATH=1 -j$(sysctl -n hw.ncpu)
-```
-
-The 3DS toolchain expects devkitPro/devkitARM and the usual 3DS build tools such as `3dsxtool`, `smdhtool`, `tex3ds`, and `makerom`. Docker, Linux/WSL, and MSYS2 setups are all viable if the devkitPro environment is installed correctly.
-
-3DS ツールチェーンには devkitPro/devkitARM と、`3dsxtool`、`smdhtool`、`tex3ds`、`makerom` などの一般的な 3DS ビルドツールが必要です。devkitPro 環境が正しく設定されていれば、Docker、Linux/WSL、MSYS2 の環境でもビルドできます。
-
-
-## 📦Package Assets / パッケージ用アセット
-
-To change the `.3dsx` icon, replace `3ds/icon.png` before building. The build process generates the SMDH file used by the final `.3dsx`.
-
-`.3dsx` アイコンを変更する場合は、ビルド前に `3ds/icon.png` を置き換えてください。ビルド処理によって、最終的な `.3dsx` で使用される SMDH ファイルが生成されます。
-
-To change CIA presentation assets, update `3ds/icon.png` and `3ds/banner.png`, then regenerate the CIA icon and banner assets with `bannertool`.
-
-CIA の表示用アセットを変更する場合は、`3ds/icon.png` と `3ds/banner.png` を更新し、`bannertool` で CIA アイコンとバナーアセットを再生成してください。
-
-If `bannertool` is not installed globally, point the `BANNERTOOL` environment variable at any local `bannertool` executable before building `.cia`.
-
-`bannertool` がグローバルにインストールされていない場合は、`.cia` をビルドする前に、任意のローカル `bannertool` 実行ファイルを `BANNERTOOL` 環境変数で指定してください。
-
-### Optional 3D CIA banner / 任意の 3D CIA バナー
-
-The release build keeps the static PNG banner as the default presentation path. The optional 3D HOME Menu banner is distributed as a separate CGFX-based asset set under `3ds/banner_3d/`; projects that do not need the 3D banner can continue using the standard PNG banner without changing the build system.
-
-配布版ビルドでは、静的 PNG バナーを標準の表示経路として維持しています。任意の 3D HOME メニューバナーは、`3ds/banner_3d/` 以下の CGFX ベースの別アセットとして同梱されています。3D バナーを使用しない場合でも、ビルドシステムを変更せず従来の PNG バナーを利用できます。
-
-Included 3D banner assets:
-
-同梱されている 3D バナー用アセット：
-
-- `3ds/banner_3d/banner.cgfx`: finalized CGFX model for the 3D HOME Menu banner.
-- `3ds/banner_3d/banner.bnr`: prebuilt BNR generated from `banner.cgfx` and `3ds/audio.wav`.
-- `3ds/audio.wav`: HOME Menu banner audio. Replacement audio should be stereo PCM WAV and should remain within the approximately 3-second practical limit used by 3DS banners.
-
-To regenerate the BNR from the finished CGFX:
-
-完成済み CGFX から BNR を再生成する場合：
+CGFX または音声を更新した後に 3D BNR を再生成：
 
 ```sh
 BANNERTOOL=/path/to/bannertool
 "$BANNERTOOL" makebanner -ci 3ds/banner_3d/banner.cgfx -a 3ds/audio.wav -o 3ds/banner_3d/banner.bnr
 ```
 
-Because the Makefile intentionally keeps the PNG banner as the default, inject the 3D banner manually after the normal build has produced the ELF and CIA icon:
+Banner authoring helpers are under `tools/banner_3d/`. Keep the CGFX below 512 KiB and validate final banners on real hardware.
 
-Makefile は意図的に PNG バナーを標準のままにしているため、通常ビルドで ELF と CIA アイコンを生成した後、3D バナーを手動で組み込んでください：
+バナー制作補助ツールは `tools/banner_3d/` にあります。CGFX は 512 KiB 未満に保ち、最終バナーは実機で確認してください。
 
-```sh
-makerom -f cia \
-  -o build/us_3ds/sm64.us.aev64u6.cia \
-  -rsf 3ds/template.rsf \
-  -target t \
-  -elf build/us_3ds/sm64.us.aev64u6.elf \
-  -icon 3ds/icon.icn \
-  -banner 3ds/banner_3d/banner.bnr
-```
+## 🗺️ Minimap Tools / ミニマップツール
 
-For other regions or target suffixes, adjust the `build/<version>_3ds/sm64.<version>.aev64u6.*` paths to match the artifacts generated by the build.
+Internal scripts under `tools/` can regenerate collision drafts, textured drafts, and minimap text resources. Python 3 is required; text texture generation also requires Pillow.
 
-他のリージョンやターゲット接尾辞を使う場合は、ビルドで生成された成果物に合わせて `build/<version>_3ds/sm64.<version>.aev64u6.*` のパスを変更してください。
-
-### 3D banner production notes / 3D バナー制作ノート
-
-The internal helper scripts used to generate and inspect the banner scene are located in `tools/banner_3d/`. They are intentionally kept outside the default Makefile flow because the 3D banner is an optional release asset.
-
-バナーシーンの生成と確認に使用した内部補助スクリプトは `tools/banner_3d/` にあります。3D バナーは任意の配布アセットであるため、これらのスクリプトは標準 Makefile フローには組み込んでいません。
-
-Recommended asset pipeline:
-
-推奨アセットパイプライン：
-
-1. Author or refine the banner scene as glTF/GLB, normally through Blender. The included Whomp's Fortress generator can also rebuild the project-specific draft scene with `python3 tools/banner_3d/make_wf_stage_gltf.py`.
-2. Convert the glTF scene to CGFX with `pycgfx`, for example: `python3 /path/to/pycgfx/main.py 3ds/banner_3d/wf_stage/wf_stage.gltf 3ds/banner_3d/banner.cgfx`.
-3. Validate the CGFX size before packaging. A 3DS HOME Menu banner CGFX should remain below 512 KiB.
-4. Generate the BNR with `bannertool makebanner -ci`.
-5. Inject the generated BNR into the CIA with the manual `makerom` command above.
-
-Hardware-validated constraints for this banner:
-
-このバナーで実機検証した制約：
-
-- Keep opaque atlas textures and alpha-cutout textures separated. Alpha data inside the opaque atlas can make the HOME Menu stall while loading the banner.
-- Use alpha `MASK` for cutout planes such as the title logo, coins and fences. Avoid alpha `BLEND` unless it has been tested on hardware for the specific material.
-- Keep the rotating model, title logo and background plane as separate banner nodes. The rotating stage belongs under `COMMON`; the logo/background planes must remain non-rotating billboard-style nodes.
-- Align the rotating stage around the world origin. The HOME Menu rotation pivot is derived from the banner scene, so small origin errors become visible during automatic rotation.
-- Keep banner audio short. Stereo PCM WAV under roughly 3 seconds is the safest format tested for this project.
-- Desktop previews are useful for layout and texture inspection, but hardware testing is required for final validation because HOME Menu clipping, lighting, alpha handling and automatic rotation differ from Blender/Xcode previews.
-
-3D banner related repositories and references:
-
-3D バナー関連のリポジトリと参考資料：
-
-- [skyfloogle/pycgfx](https://github.com/skyfloogle/pycgfx): glTF/GLB to CGFX conversion tool used for HOME Menu banner models.
-- `bannertool` and `makerom`: 3DS packaging tools used to generate BNR files and rebuild CIA packages. Install them through a devkitPro-compatible 3DS toolchain setup or provide their paths manually.
-
-## 🗺️Minimap Tooling / ミニマップ用ツール
-
-The repository includes internal tools used to draft, calibrate, and regenerate minimap resources. 
-
-このリポジトリには、ミニマップ素材の下書き、調整、再生成に使う内部ツールが含まれています。これらのツールは主にプロジェクトのアート作業やレイアウト調整のためのものです。
-
-### Python prerequisites / Python 依存関係
-
-The minimap helper scripts use Python 3. The texture text generators also require Pillow:
-
-ミニマップ補助スクリプトは Python 3 を使用します。テキストテクスチャ生成スクリプトには Pillow も必要です：
+`tools/` 内の内部スクリプトで、コリジョン下書き、テクスチャ付き下書き、ミニマップ文字素材を再生成できます。Python 3 が必要で、文字テクスチャ生成には Pillow も必要です。
 
 ```sh
 python3 -m pip install pillow
-```
-
-### Collision draft maps / コリジョン下書きマップ
-
-Generate a rough collision-based draft for one level area:
-
-単一のレベルエリアについて、コリジョンを基にした大まかな下書きマップを生成します：
-
-```sh
 python3 tools/minimap_extract_collision.py --level bob --area 1 --grid --fit
-```
-
-This writes an image like `minimap_work/collision/bob_1.png`.
-
-`minimap_work/collision/bob_1.png` のような画像が出力されます。
-
-Generate collision drafts for every level area:
-
-すべてのレベルエリアについて、コリジョン下書きマップを一括生成します：
-
-```sh
-python3 tools/minimap_extract_collision.py --all --grid --fit
-```
-
-### Textured draft maps / テクスチャ合成下書きマップ
-
-Generate a composed textured draft for one area using the project’s usual composition layers:
-
-プロジェクトで通常使用する合成レイヤーを使って、単一エリアのテクスチャ付き下書きマップを生成します：
-
-```sh
-python3 tools/minimap_extract_textured.py --level bob --area 1 --compose-map --grid --mark-mario-start
-```
-
-This writes an image like `minimap_work/textured/bob_area1_textured.png`.
-
-`minimap_work/textured/bob_area1_textured.png` のような画像が出力されます。
-
-Generate textured drafts for every area:
-
-すべてのエリアについて、テクスチャ付き下書きマップを一括生成します：
-
-```sh
-python3 tools/minimap_extract_textured.py --all --compose-map
-```
-
-Useful flags for textured drafts include:
-
-テクスチャ下書きマップでよく使う追加フラグ：
-
-- `--include-walls`: include near-vertical geometry for debugging silhouettes.
-- `--include-water-movtex`: also overlay water movtex regions.
-- `--no-screen-anchor-calibration`: disable alignment against captured 3DS screenshots.
-- `--output` or `--output-dir`: send renders to a custom path.
-
-- `--include-walls`：ほぼ垂直なジオメトリを含め、輪郭のデバッグに使います。
-- `--include-water-movtex`：水面 movtex 領域も重ねて描画します。
-- `--no-screen-anchor-calibration`：3DS 実機スクリーンショットとの位置合わせ補正を無効化します。
-- `--output` または `--output-dir`：結果を任意のパスへ出力します。
-
-### Minimap text textures / ミニマップ用テキストテクスチャ
-
-Regenerate title-related minimap textures such as `PRESS START` and the copyright texture:
-
-`PRESS START` やコピーライト表示など、タイトル関連のミニマップ用テクスチャを再生成します：
-
-```sh
+python3 tools/minimap_extract_textured.py --level bob --area 1 --compose-map
 python3 tools/generate_minimap_title_textures.py
-```
-
-Regenerate BGM-title textures used on the lower screen:
-
-下画面で使用する BGM タイトルテクスチャを再生成します：
-
-```sh
 python3 tools/generate_minimap_music_textures.py
 ```
 
-### Rebuild converted minimap textures / 変換済みミニマップテクスチャの再ビルド
+Updated `src/minimap/textures/*.png` files are converted automatically during the normal 3DS build.
 
-The 3DS build converts `src/minimap/textures/*.png` into `.t3s`, `.t3x`, and generated headers automatically through `tex3ds`. In other words, once the PNG sources are updated, a normal `make` is enough to rebuild the converted minimap texture assets.
+更新した `src/minimap/textures/*.png` は通常の 3DS ビルド時に自動変換されます。
 
-3DS ビルドでは、`src/minimap/textures/*.png` が `tex3ds` によって `.t3s`、`.t3x`、生成ヘッダーへ自動変換されます。つまり PNG ソースを更新した後は、通常どおり `make` を実行するだけで、変換済みのミニマップテクスチャアセットを再ビルドできます。
+## 🌲 Project Structure / プロジェクト構成
 
-## 🌲Project Structure / プロジェクト構成
+The repository follows the standard SM64 decompilation layout. Most project-specific game and renderer changes live under `enhancements/`, `src/`, and `include/`; 3DS package assets live under `3ds/`, and build or asset helpers live under `tools/`.
 
-The repository follows the standard Super Mario 64 decompilation layout, with 3DS-specific platform code and project enhancements layered on top.
+本リポジトリは標準的な SM64 デコンパイル構成に従っています。プロジェクト固有のゲーム・描画変更は主に `enhancements/`、`src/`、`include/`、3DS パッケージ素材は `3ds/`、ビルド・アセット補助ツールは `tools/` にあります。
 
-このリポジトリは標準的な『スーパーマリオ64』デコンパイルプロジェクトの構成に従い、その上に 3DS 固有のプラットフォームコードと本プロジェクトの拡張機能を重ねています。
+## 🫡 Credits / クレジット
 
-```text
-sm64
-├── actors: object behaviors, geo layout, and display lists
-├── asm: handwritten assembly code and non-matching sections
-├── assets: animation and demo data
-├── bin: C files for ordering display lists and textures
-├── build: generated build output
-├── data: behavior scripts and miscellaneous data
-├── doxygen: documentation infrastructure
-├── enhancements: optional and project-specific gameplay/rendering changes
-├── include: header files
-├── levels: level scripts, geo layout, and display lists
-├── lib: SDK library code
-├── rsp: audio and Fast3D RSP assembly code
-├── sound: sequences, sound samples, and sound banks
-├── src: C source code for the game and platform layer
-│   ├── audio: audio code
-│   ├── buffers: stacks, heaps, and task buffers
-│   ├── engine: script processing engines and utilities
-│   ├── game: gameplay behaviors and core game source
-│   ├── goddard: Mario intro screen
-│   ├── menu: title, file, act, and level-selection menus
-│   └── pc: port code, audio, video, and 3DS renderer code
-├── text: dialog, level names, and act names
-├── textures: skybox and generic texture data
-└── tools: build and asset tools
-```
+This project builds on the work of the SM64 decompilation and port communities, including Gericom's `sm64_3ds` lineage and the Refresh 11-era 3DS improvements.
 
-## 🫡Credits / クレジット
+本プロジェクトは、Gericom の `sm64_3ds` 系統および Refresh 11 時期の 3DS 改善を含む、SM64 デコンパイル・ポートコミュニティの成果を基盤としています。
 
-This project builds on the Super Mario 64 decompilation and 3DS port work by the broader SM64 port community.
+Minimap resources include work by alecpike (Bob-omb Battlefield), Turtle Boy (Lethal Lava Land and Whomp's Fortress), SlyP54 (Castle Grounds), Bruz (Castle Interior), and SM64DS minimaps documented by Mario Wiki.
 
-本プロジェクトは、『スーパーマリオ64』デコンパイルプロジェクトと、SM64 port コミュニティによる 3DS ポート作業を基盤としています。
+ミニマップ素材については、alecpike（Bob-omb Battlefield）、Turtle Boy（Lethal Lava Land、Whomp's Fortress）、SlyP54（Castle Grounds）、Bruz（Castle Interior）、Mario Wiki 掲載の SM64DS ミニマップ素材に感謝します。
 
-Credits go to Gericom for the `sm64_3ds` port lineage that this 3DS flavor is based on.
+This is an unofficial fan project. Super Mario 64 and related assets are owned by Nintendo.
 
-本 3DS 版の基礎となった `sm64_3ds` ポート系統について、Gericom に感謝します。
-
-The 3DS branch is based on the Refresh 11-era port work and keeps the original 3DS-specific improvements such as stereo 3D, multi-threaded audio, enhanced RSPA, SMDH support, and 3DS build packaging.
-
-この 3DS ブランチは Refresh 11 時期のポート作業をベースにしており、立体 3D、マルチスレッド音声、強化 RSPA、SMDH 対応、3DS ビルドパッケージングなど、当時の 3DS 固有の改善を維持しています。
-
-Minimap model and map resource credits include alecpike for Bob-omb Battlefield, Turtle Boy for Lethal Lava Land and Whomp's Fortress, SlyP54 for Castle Grounds, Bruz for Castle Interior, and SM64DS minimaps in Mario wiki.
-
-ミニマップ用モデルおよびマップ素材については、Bob-omb Battlefield の alecpike、Lethal Lava Land と Whomp's Fortress の Turtle Boy、Castle Grounds の SlyP54、Castle Interior の Bruz、そして Mario Wiki の SM64DS ミニマップ素材に感謝します。
-
-This is an unofficial fan project.
-Super Mario 64 and related assets are owned by Nintendo.
-
-これは非公式のファンプロジェクトです。
-『スーパーマリオ64』および関連するキャラクター、商標、アセットは任天堂に帰属します。
+これは非公式のファンプロジェクトです。『スーパーマリオ64』および関連するキャラクター、商標、アセットは任天堂に帰属します。
