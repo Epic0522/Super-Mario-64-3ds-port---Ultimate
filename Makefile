@@ -179,14 +179,14 @@ ifneq ($(MAKECMDGOALS),distclean)
 # Make sure assets exist
 NOEXTRACT ?= 0
 ifeq ($(NOEXTRACT),0)
-DUMMY != ./extract_assets.py $(VERSION) >&2 || echo FAIL
+DUMMY := $(shell ./extract_assets.py $(VERSION) 1>&2 || echo FAIL)
 ifeq ($(DUMMY),FAIL)
   $(error Failed to extract assets)
 endif
 endif
 
 # Make tools if out of date
-DUMMY != $(MAKE) -s -C tools >&2 || echo FAIL
+DUMMY := $(shell $(MAKE) -s -C tools 1>&2 || echo FAIL)
 ifeq ($(DUMMY),FAIL)
   $(error Failed to build tools)
 endif
