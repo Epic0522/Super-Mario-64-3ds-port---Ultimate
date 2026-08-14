@@ -49,6 +49,7 @@ SOFTWARE.
 #endif
 
 #include <cstdio>
+#include <cstdint>
 #include <vector>
 #include <cstdlib>
 #include <cstdarg>
