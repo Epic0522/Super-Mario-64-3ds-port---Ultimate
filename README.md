@@ -9,18 +9,12 @@
   <tr>
     <td width="50%" align="center" valign="top">
       <img src="indevscreenshots/2026-07-07_13-11-53.056_top.jpeg" alt="3D HOME Menu banner" width="100%"><br>
-      <sub>3D HOME Menu banner / 3D HOME メニューバナー</sub>
     </td>
     <td width="50%" align="center" valign="top">
       <img src="indevscreenshots/IMG_9021.jpeg" alt="Super Mario 64 3DS Port Ultimate running on hardware" width="100%"><br>
-      <sub>Running on Nintendo 3DS / Nintendo 3DS 実機</sub>
     </td>
   </tr>
 </table>
-
-Super Mario 64 3DS Port Ultimate is a Nintendo 3DS-focused build of the SM64 decompilation port. It combines a bottom-screen minimap and HUD, improved camera controls, persistent display options, dynamic shadows, ragdoll effects, presentation upgrades, and optional debug tools.
-
-Super Mario 64 3DS Port Ultimate は、SM64 デコンパイルポートを Nintendo 3DS 向けに拡張したビルドです。下画面ミニマップと HUD、改良されたカメラ操作、保存可能な表示設定、動的シャドウ、ラグドール、表示演出、任意のデバッグ機能を搭載しています。
 
 ## ⬇️ Download / ダウンロード
 
@@ -43,18 +37,10 @@ git sparse-checkout set --no-cone '/*' '!/indevscreenshots/'
 
 ## ⚙️ Features / 機能
 
-- **Bottom-screen interface:** course minimaps, Mario position and heading, lives, stars, coins, red coins, BGM titles, touch settings, and synchronized transitions.
-  **下画面インターフェース：** コースマップ、マリオの位置と向き、残機、スター、コイン、赤コイン、BGM 名、タッチ設定、同期トランジションを表示します。
-- **Camera and controls:** switch between the official camera and free Puppycam-style camera, with C-Stick input and quick recentering.
-  **カメラと操作：** 公式カメラと Puppycam 風自由カメラを切り替え、C-Stick 操作とクイック再センタリングを利用できます。
-- **3DS presentation:** stereoscopic 3D, 400px/800px modes, anti-aliasing options, a 3D HOME Menu banner, and persistent display settings.
-  **3DS 表示演出：** 立体 3D、400px/800px モード、アンチエイリアス設定、3D HOME メニューバナー、保存可能な表示設定に対応します。
-- **Gameplay enhancements:** optional dynamic shadows, death ragdoll, and hit ragdoll behavior.
-  **ゲームプレイ拡張：** 動的シャドウ、死亡ラグドール、受撃ラグドールを任意で有効化できます。
-- **Performance and audio:** 60 FPS support, multi-threaded audio, enhanced RSPA, and New 3DS-oriented rendering options. Luma3DS v10.1.1 or newer is required for multi-threaded audio.
-  **パフォーマンスと音声：** 60 FPS、マルチスレッド音声、強化 RSPA、New 3DS 向け描画設定を搭載しています。マルチスレッド音声には Luma3DS v10.1.1 以降が必要です。
-- **Debug tools:** an optional, non-persistent debug mode provides test shortcuts, FPS display support, and ragdoll utilities.
-  **デバッグ機能：** 保存されない任意の debug モードで、テスト用ショートカット、FPS 表示、ラグドール確認機能を利用できます。
+- **Bottom-screen interface** **下画面インターフェース**
+- **Hybrid Camera and controls** **カメラと操作**
+- **3D presentation** **3D 表示演出**
+- **Gameplay enhancements** **ゲームプレイ拡張**
 
 New 3DS is recommended. Typical targets are 40–60 FPS on New 3DS with enhanced effects enabled and 25–30 FPS on Old 3DS with lighter 400px settings.
 
@@ -158,10 +144,6 @@ Banner authoring helpers are under `tools/banner_3d/`. Keep the CGFX below 512 K
 バナー制作補助ツールは `tools/banner_3d/` にあります。CGFX は 512 KiB 未満に保ち、最終バナーは実機で確認してください。
 
 ## 🗺️ Minimap Tools / ミニマップツール
-
-Internal scripts under `tools/` can regenerate collision drafts, textured drafts, and minimap text resources. Python 3 is required; text texture generation also requires Pillow.
-
-`tools/` 内の内部スクリプトで、コリジョン下書き、テクスチャ付き下書き、ミニマップ文字素材を再生成できます。Python 3 が必要で、文字テクスチャ生成には Pillow も必要です。
 
 ```sh
 python3 -m pip install pillow
